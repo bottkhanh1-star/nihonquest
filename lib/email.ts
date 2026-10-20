@@ -26,15 +26,15 @@ function getOtpEmailCopy(type: "REGISTER" | "RESET_PASSWORD", nativeLanguage?: s
   if (lang === "vi") {
     return {
       lang: "vi",
-      title: isRegister ? "Xác nhận tạo tài khoản Nihon Quest 🌸" : "Mã xác nhận khôi phục mật khẩu 🔑",
+      title: isRegister ? "[Nihon Quest] Mã xác thực tạo tài khoản" : "[Nihon Quest] Mã xác nhận khôi phục mật khẩu",
       subtitle: "Học Tiếng Nhật Thông Minh & Thú Vị",
       greeting: "Konnichiwa! (Xin chào) 👋",
       reason: isRegister
         ? "Bạn nhận được email này vì đã gửi yêu cầu <strong>xác thực email để tạo tài khoản Nihon Quest</strong>."
         : "Bạn nhận được email này vì đã gửi yêu cầu <strong>khôi phục mật khẩu tài khoản Nihon Quest của bạn</strong>.",
       boxTitle: "Mã xác thực OTP của bạn",
-      expiry: "⏱️ Mã có hiệu lực trong vòng 10 phút",
-      note: "⚠️ Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email hoặc đổi mật khẩu để bảo vệ an toàn cho tài khoản.",
+      expiry: "Mã có hiệu lực trong vòng 10 phút",
+      note: "Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email hoặc đổi mật khẩu để bảo vệ an toàn cho tài khoản.",
       footer: "© " + new Date().getFullYear() + " Nihon Quest. Chúc bạn học tập thật tốt trên hành trình chinh phục tiếng Nhật！🇯🇵",
     };
   }
@@ -42,15 +42,15 @@ function getOtpEmailCopy(type: "REGISTER" | "RESET_PASSWORD", nativeLanguage?: s
   if (lang === "zh-cn" || lang === "zh") {
     return {
       lang: "zh-CN",
-      title: isRegister ? "Nihon Quest 账号注册验证码 🌸" : "Nihon Quest 找回密码验证码 🔑",
+      title: isRegister ? "[Nihon Quest] 账号注册验证码" : "[Nihon Quest] 找回密码验证码",
       subtitle: "聪明且有趣的日语学习平台",
       greeting: "Konnichiwa! (你好) 👋",
       reason: isRegister
         ? "您收到此邮件是因为您正在申请<strong>验证电子邮箱并创建 Nihon Quest 账户</strong>。"
         : "您收到此邮件是因为您正在申请<strong>找回您的 Nihon Quest 账户密码</strong>。",
       boxTitle: "您的 OTP 验证码",
-      expiry: "⏱️ 验证码有效期为 10 分钟",
-      note: "⚠️ 如果您未发起此操作，请忽略此邮件或尽快修改密码以保护账号安全。",
+      expiry: "验证码有效期为 10 分钟",
+      note: "如果您未发起此操作，请忽略此邮件或尽快修改密码以保护账号安全。",
       footer: "© " + new Date().getFullYear() + " Nihon Quest. 祝您在日语学习之旅中取得好成绩！🇯🇵",
     };
   }
@@ -58,15 +58,15 @@ function getOtpEmailCopy(type: "REGISTER" | "RESET_PASSWORD", nativeLanguage?: s
   if (lang === "zh-tw" || lang === "zh-hk") {
     return {
       lang: "zh-TW",
-      title: isRegister ? "Nihon Quest 帳號註冊驗證碼 🌸" : "Nihon Quest 重設密碼驗證碼 🔑",
+      title: isRegister ? "[Nihon Quest] 帳號註冊驗證碼" : "[Nihon Quest] 重設密碼驗證碼",
       subtitle: "聰明且有趣的日語學習平台",
       greeting: "Konnichiwa! (你好) 👋",
       reason: isRegister
         ? "您收到此郵件是因為您正在申請<strong>驗證電子郵件以建立 Nihon Quest 帳號</strong>。"
         : "您收到此郵件是因為您正在申請<strong>重設您的 Nihon Quest 帳號密碼</strong>。",
       boxTitle: "您的 OTP 驗證碼",
-      expiry: "⏱️ 驗證碼有效期為 10 分鐘",
-      note: "⚠️ 若非您本人操作，請忽略此郵件或儘速變更密碼以確保帳號安全。",
+      expiry: "驗證碼有效期為 10 分鐘",
+      note: "若非您本人操作，請忽略此郵件或儘速變更密碼以確保帳號安全。",
       footer: "© " + new Date().getFullYear() + " Nihon Quest. 祝您日語學習旅程一切順利！🇯🇵",
     };
   }
@@ -74,15 +74,15 @@ function getOtpEmailCopy(type: "REGISTER" | "RESET_PASSWORD", nativeLanguage?: s
   if (lang === "ja") {
     return {
       lang: "ja",
-      title: isRegister ? "Nihon Quest アカウント認証コード 🌸" : "Nihon Quest パスワード再設定コード 🔑",
+      title: isRegister ? "[Nihon Quest] アカウント認証コード" : "[Nihon Quest] パスワード再設定コード",
       subtitle: "スマートで楽しい日本語学習プラットフォーム",
       greeting: "こんにちは！ 👋",
       reason: isRegister
         ? "<strong>Nihon Quest アカウント作成</strong>のリクエストを受け付けました。"
         : "<strong>Nihon Quest パスワード再設定</strong>のリクエストを受け付けました。",
       boxTitle: "認証コード（OTP）",
-      expiry: "⏱️ コードの有効期限は10分です",
-      note: "⚠️ このリクエストにお心当たりがない場合は、このメールを破棄してください。",
+      expiry: "コードの有効期限は10分です",
+      note: "このリクエストにお心当たりがない場合は、このメールを破棄してください。",
       footer: "© " + new Date().getFullYear() + " Nihon Quest. 日本語学習を応援しています！🇯🇵",
     };
   }
@@ -90,15 +90,15 @@ function getOtpEmailCopy(type: "REGISTER" | "RESET_PASSWORD", nativeLanguage?: s
   if (lang === "ko") {
     return {
       lang: "ko",
-      title: isRegister ? "Nihon Quest 계정 인증 코드 🌸" : "Nihon Quest 비밀번호 재설정 코드 🔑",
+      title: isRegister ? "[Nihon Quest] 계정 인증 번호" : "[Nihon Quest] 비밀번호 재설정 번호",
       subtitle: "스마트하고 즐거운 일본어 학습 플랫폼",
       greeting: "Konnichiwa! (안녕하세요) 👋",
       reason: isRegister
         ? "<strong>Nihon Quest 계정 생성을 위한 이메일 인증</strong> 요청을 받았습니다."
         : "<strong>Nihon Quest 비밀번호 재설정</strong> 요청을 받았습니다。",
       boxTitle: "OTP 인증 번호",
-      expiry: "⏱️ 인증 번호는 10분간 유효합니다",
-      note: "⚠️ 본인이 요청하지 않은 경우 이 메일을 무시하거나 비밀번호를 변경해 주세요。",
+      expiry: "인증 번호는 10분간 유효합니다",
+      note: "본인이 요청하지 않은 경우 이 메일을 무시하거나 비밀번호를 변경해 주세요。",
       footer: "© " + new Date().getFullYear() + " Nihon Quest. 즐거운 일본어 학습 여정이 되기를 응원합니다! 🇯🇵",
     };
   }
@@ -106,15 +106,15 @@ function getOtpEmailCopy(type: "REGISTER" | "RESET_PASSWORD", nativeLanguage?: s
   if (lang === "es") {
     return {
       lang: "es",
-      title: isRegister ? "Verifica tu cuenta de Nihon Quest 🌸" : "Restablece tu contraseña de Nihon Quest 🔑",
+      title: isRegister ? "[Nihon Quest] Código de verificación" : "[Nihon Quest] Restablecer contraseña",
       subtitle: "Aprende japonés de forma inteligente y divertida",
       greeting: "¡Konnichiwa! (Hola) 👋",
       reason: isRegister
         ? "Recibiste este correo para <strong>verificar tu correo y registrar tu cuenta en Nihon Quest</strong>."
         : "Recibiste este correo para <strong>restablecer la contraseña de tu cuenta de Nihon Quest</strong>.",
       boxTitle: "Tu código de verificación OTP",
-      expiry: "⏱️ Este código expira en 10 minutos",
-      note: "⚠️ Si no realizaste esta solicitud, ignora este correo o cambia tu contraseña.",
+      expiry: "Este código expira en 10 minutos",
+      note: "Si no realizaste esta solicitud, ignora este correo o cambia tu contraseña.",
       footer: "© " + new Date().getFullYear() + " Nihon Quest. ¡Te deseamos mucho éxito aprendiendo japonés! 🇯🇵",
     };
   }
@@ -122,15 +122,15 @@ function getOtpEmailCopy(type: "REGISTER" | "RESET_PASSWORD", nativeLanguage?: s
   if (lang === "fr") {
     return {
       lang: "fr",
-      title: isRegister ? "Vérifiez votre compte Nihon Quest 🌸" : "Réinitialisation de votre mot de passe Nihon Quest 🔑",
+      title: isRegister ? "[Nihon Quest] Code de vérification" : "[Nihon Quest] Réinitialisation du mot de passe",
       subtitle: "Apprenez le japonais de manière intelligente et ludique",
       greeting: "Konnichiwa ! (Bonjour) 👋",
       reason: isRegister
         ? "Vous recevez ce courriel pour <strong>valider votre inscription sur Nihon Quest</strong>."
         : "Vous recevez ce courriel pour <strong>réinitialiser votre mot de passe Nihon Quest</strong>.",
       boxTitle: "Votre code de vérification OTP",
-      expiry: "⏱️ Ce code expire dans 10 minutes",
-      note: "⚠️ Si vous n'êtes pas à l'origine de cette demande, veuillez ignorer ce message.",
+      expiry: "Ce code expire dans 10 minutes",
+      note: "Si vous n'êtes pas à l'origine de cette demande, veuillez ignorer ce message.",
       footer: "© " + new Date().getFullYear() + " Nihon Quest. Bonne continuation dans votre apprentissage du japonais ! 🇯🇵",
     };
   }
@@ -138,30 +138,30 @@ function getOtpEmailCopy(type: "REGISTER" | "RESET_PASSWORD", nativeLanguage?: s
   if (lang === "de") {
     return {
       lang: "de",
-      title: isRegister ? "Bestätige dein Nihon Quest-Konto 🌸" : "Setze dein Nihon Quest-Passwort zurück 🔑",
+      title: isRegister ? "[Nihon Quest] Bestätigungscode" : "[Nihon Quest] Passwort zurücksetzen",
       subtitle: "Japanisch lernen – smart und unterhaltsam",
       greeting: "Konnichiwa! (Hallo) 👋",
       reason: isRegister
         ? "Du erhältst diese E-Mail zur <strong>Bestätigung deines Kontos bei Nihon Quest</strong>."
         : "Du erhältst diese E-Mail, um <strong>dein Passwort für Nihon Quest zurückzusetzen</strong>.",
       boxTitle: "Dein OTP-Verifizierungscode",
-      expiry: "⏱️ Dieser Code ist 10 Minuten lang gültig",
-      note: "⚠️ Wenn du diese Anfrage nicht gestellt hast, ignoriere diese E-Mail bitte.",
+      expiry: "Dieser Code ist 10 Minuten lang gültig",
+      note: "Wenn du diese Anfrage nicht gestellt hast, ignoriere diese E-Mail bitte.",
       footer: "© " + new Date().getFullYear() + " Nihon Quest. Viel Erfolg beim Japanischlernen! 🇯🇵",
     };
   }
 
   return {
     lang: "en",
-    title: isRegister ? "Verify Your Nihon Quest Account 🌸" : "Reset Your Nihon Quest Password 🔑",
+    title: isRegister ? "[Nihon Quest] Account Verification Code" : "[Nihon Quest] Password Reset Code",
     subtitle: "Smart & Engaging Japanese Learning",
     greeting: "Konnichiwa! 👋",
     reason: isRegister
       ? "You received this email because you requested to <strong>verify your email and create a Nihon Quest account</strong>."
       : "You received this email because you requested to <strong>reset your Nihon Quest account password</strong>.",
     boxTitle: "Your OTP Verification Code",
-    expiry: "⏱️ This code expires in 10 minutes",
-    note: "⚠️ If you did not request this, please ignore this email or change your password to keep your account safe.",
+    expiry: "This code expires in 10 minutes",
+    note: "If you did not request this, please ignore this email or change your password to keep your account safe.",
     footer: "© " + new Date().getFullYear() + " Nihon Quest. Wishing you the best on your Japanese learning journey! 🇯🇵",
   };
 }
@@ -218,7 +218,7 @@ export async function sendOtpEmail({ to, code, type, nativeLanguage }: SendOtpEm
   const port = Number(process.env.SMTP_PORT || 587);
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM || (user ? `"Nihon Quest 🌸" <${user}>` : `"Nihon Quest" <noreply@nihonquest.local>`);
+  const from = process.env.SMTP_FROM || (user ? `"Nihon Quest" <${user}>` : `"Nihon Quest" <noreply@nihonquest.local>`);
 
   // In test environment, skip real sending
   if (process.env.NODE_ENV === "test") {
@@ -260,11 +260,35 @@ export async function sendOtpEmail({ to, code, type, nativeLanguage }: SendOtpEm
           auth: { user, pass },
         });
 
+    const plainText = `${copy.title}
+
+${copy.greeting}
+
+${copy.reason.replace(/<[^>]+>/g, "")}
+
+${copy.boxTitle}: ${code}
+(${copy.expiry})
+
+${copy.note}
+
+${copy.footer}
+`;
+
+    const messageId = `<otp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}@${user.includes("@") ? user.split("@")[1] : "nihonquest.local"}>`;
+
     await transporter.sendMail({
       from,
       to,
       subject: copy.title,
+      text: plainText,
       html,
+      headers: {
+        "X-Priority": "1",
+        "X-MSMail-Priority": "High",
+        "Importance": "high",
+        "X-Auto-Response-Suppress": "All",
+        "Message-ID": messageId,
+      },
     });
 
     console.log(`✅ [EMAIL SENT SUCCESSFULLY] to ${to}`);
@@ -295,8 +319,8 @@ export async function sendStudyReminderEmail({
   const isEn = nativeLanguage === "en";
   const name = userName || (isEn ? "Learner" : "Bạn");
   const subject = isEn
-    ? `🌸 Nihon Quest Daily Reminder: Keep your ${streak}-day streak alive!`
-    : `🌸 Nihon Quest: Giữ vững chuỗi ${streak} ngày Streak & ôn luyện hôm nay!`;
+    ? `[Nihon Quest] Daily Reminder: Keep your ${streak}-day streak alive!`
+    : `[Nihon Quest] Giữ vững chuỗi ${streak} ngày Streak & ôn luyện hôm nay!`;
 
   const baseUrl = process.env.NEXTAUTH_URL || "https://nihonquest.netlify.app";
 
@@ -387,7 +411,7 @@ export async function sendStudyReminderEmail({
   const port = Number(process.env.SMTP_PORT || 587);
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM || (user ? `"Aoi Sensei 🌸 Nihon Quest" <${user}>` : `"Nihon Quest" <noreply@nihonquest.local>`);
+  const from = process.env.SMTP_FROM || (user ? `"Aoi Sensei - Nihon Quest" <${user}>` : `"Nihon Quest" <noreply@nihonquest.local>`);
 
   if (!user || !pass) {
     if (process.env.NODE_ENV === "production") {
@@ -416,11 +440,31 @@ export async function sendStudyReminderEmail({
           auth: { user, pass },
         });
 
+    const reminderPlainText = `${subject}
+
+${isEn ? `Konnichiwa, ${name}!` : `Konnichiwa, ${name}!`}
+
+${isEn ? "Aoi Sensei and your Nihon Quest study plan are waiting for you today. Just 10-15 minutes of consistent practice makes a huge difference!" : "Aoi Sensei gửi lời chào và nhắc bạn dành ra 10-15 phút hôm nay để giữ nhịp học tiếng Nhật thật đều đặn nhé!"}
+
+- ${isEn ? "Day Streak" : "Ngày Streak"}: ${streak}
+- ${isEn ? "SRS Due" : "Thẻ Cần Ôn"}: ${dueCards}
+- ${isEn ? "Current JLPT" : "Cấp độ JLPT"}: ${currentLevel}
+
+${baseUrl}/app
+
+© ${new Date().getFullYear()} Nihon Quest.
+`;
+
     await transporter.sendMail({
       from,
       to,
       subject,
+      text: reminderPlainText,
       html,
+      headers: {
+        "X-Auto-Response-Suppress": "All",
+        "List-Unsubscribe": `<${baseUrl}/app/profile>`,
+      },
     });
 
     console.log(`✅ [STUDY REMINDER SENT] to ${to}`);
