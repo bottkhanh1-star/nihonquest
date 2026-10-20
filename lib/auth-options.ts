@@ -78,7 +78,7 @@ export const authOptions: NextAuthOptions = {
             clientId: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
             allowDangerousEmailAccountLinking: true,
-            checks: ["pkce", "state"],
+            checks: ["state"],
             authorization: {
               params: {
                 access_type: "offline",
@@ -167,16 +167,6 @@ export const authOptions: NextAuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: isSecureCookieEnv,
-      },
-    },
-    pkceCodeVerifier: {
-      name: isSecureCookieEnv ? "__Secure-next-auth.pkce.code_verifier" : "next-auth.pkce.code_verifier",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: isSecureCookieEnv,
-        maxAge: 60 * 15,
       },
     },
     state: {
