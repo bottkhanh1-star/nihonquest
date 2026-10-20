@@ -13,14 +13,19 @@ if (!process.env.AUTH_TRUST_HOST) {
   process.env.AUTH_TRUST_HOST = "true";
 }
 
+// Chuẩn hoá NEXTAUTH_URL: loại bỏ dấu gạch chéo cuối nếu có
+if (process.env.NEXTAUTH_URL) {
+  process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL.replace(/\/+$/, "");
+}
+
 // Tự động nhận diện URL trên Netlify hoặc Vercel nếu người dùng chưa set NEXTAUTH_URL
 if (!process.env.NEXTAUTH_URL) {
   if (process.env.URL) {
-    process.env.NEXTAUTH_URL = process.env.URL.replace(/\/$/, "");
+    process.env.NEXTAUTH_URL = process.env.URL.replace(/\/+$/, "");
   } else if (process.env.DEPLOY_PRIME_URL) {
-    process.env.NEXTAUTH_URL = process.env.DEPLOY_PRIME_URL.replace(/\/$/, "");
+    process.env.NEXTAUTH_URL = process.env.DEPLOY_PRIME_URL.replace(/\/+$/, "");
   } else if (process.env.VERCEL_URL) {
-    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
+    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL.replace(/\/+$/, "")}`;
   }
 }
 
@@ -72,8 +77,8 @@ export const authOptions: NextAuthOptions = {
           GoogleProvider({
             clientId: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            allowDangerousEmailAccountLinking: false,
-            checks: ["state"],
+            allowDangerousEmailAccountLinking: true,
+            checks: ["pkce", "state"],
             authorization: {
               params: {
                 access_type: "offline",

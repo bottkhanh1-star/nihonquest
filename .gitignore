@@ -38,3 +38,6 @@ extracted_*.txt
 !vendor/**/SECURITY.md
 
 .open-next
+
+.wrangler
+.env.production

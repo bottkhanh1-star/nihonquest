@@ -20,7 +20,9 @@
     "import:unitcuments": "tsx scripts/import-unitcuments-knowledge.ts",
     "import:unitcuments:dry-run": "tsx scripts/import-unitcuments-knowledge.ts --dry-run",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "build:worker": "opennextjs-cloudflare build",
+    "deploy": "opennextjs-cloudflare build && wrangler deploy"
   },
   "dependencies": {
     "@neon/config": "^1.8.4",
