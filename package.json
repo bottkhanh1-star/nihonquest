@@ -27,7 +27,9 @@
   "dependencies": {
     "@neon/config": "^1.8.4",
     "@neon/env": "^1.5.1",
+    "@neondatabase/serverless": "^0.9.5",
     "@next-auth/prisma-adapter": "1.0.7",
+    "@prisma/adapter-neon": "^5.18.0",
     "@prisma/client": "5.18.0",
     "@tensorflow/tfjs": "^4.22.0",
     "@types/three": "^0.186.0",
