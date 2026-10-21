@@ -105,12 +105,16 @@ export function KanaLab({ kana, practiced }: { kana: KanaRow[]; practiced: strin
         setDoneSet((prev) => new Set(prev).add(key));
         playCorrect();
         notifyProgressUpdated();
-        showToast({ title: `Đã học: ${k.character} (${k.romaji})!`, description: "Đã thêm vào hàng đợi ôn tập Spaced Repetition!", type: "xp" });
+        showToast({
+          title: `${t("markedRemembered")}: ${k.character} (${k.romaji})!`,
+          description: t("quizSrsSavedNotice") || "Đã thêm vào hàng đợi ôn tập Spaced Repetition!",
+          type: "xp",
+        });
       } else {
-        showToast({ title: "Không lưu được ký tự.", description: `Máy chủ trả về lỗi ${res.status}. Vui lòng thử lại.`, type: "error" });
+        showToast({ title: t("errorText"), description: `Server error ${res.status}`, type: "error" });
       }
     } catch {
-      showToast({ title: "Mất kết nối với máy chủ.", description: "Chưa đánh dấu được ký tự. Hãy kiểm tra kết nối và thử lại.", type: "error" });
+      showToast({ title: t("errorText"), description: "Connection error", type: "error" });
     } finally {
       setPendingKey(null);
     }
@@ -206,8 +210,8 @@ export function KanaLab({ kana, practiced }: { kana: KanaRow[]; practiced: strin
                     <div className={`kl-glyph jp-text ${long ? "is-combo" : ""}`}>{k.character}</div>
                     <div className="kl-romaji">{k.romaji}</div>
                     <div className="kl-btns">
-                      <button type="button" onClick={() => speak(k.character)} aria-label={`Nghe phát âm ${k.romaji}`}>🔊 {t("listenAction")}</button>
-                      <button type="button" className="is-primary" onClick={() => { playClick(); setWritingTarget(k); }} aria-label={`Luyện viết ${k.romaji}`}>✍ {t("writeAction")}</button>
+                      <button type="button" onClick={() => speak(k.character)} aria-label={`${t("listenPronunciation")} ${k.romaji}`}>🔊 {t("listenAction")}</button>
+                      <button type="button" className="is-primary" onClick={() => { playClick(); setWritingTarget(k); }} aria-label={`${t("practiceWritingKana")} ${k.romaji}`}>✍ {t("writeAction")}</button>
                     </div>
                     <button type="button" className="kl-mark" onClick={() => markPracticed(k)} disabled={pendingKey === key} aria-pressed={isDone}>
                       {isDone ? t("markedRemembered") : t("markRemembered")}

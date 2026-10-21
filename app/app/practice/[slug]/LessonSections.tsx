@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { RubyWord } from "@/components/JapaneseTerm";
 import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 import { useNativeLanguage } from "@/components/LanguageContext";
-import { LocalizedVocabMeaning } from "@/lib/vocabLocalization";
+import { LocalizedVocabMeaning, findVocabEnglishMeaning } from "@/lib/vocabLocalization";
+import { LocalizedGrammarText } from "@/lib/grammarLocalization";
+import { LocalizedLessonTitle, LocalizedLessonDesc } from "@/components/LocalizedLesson";
 import {
   toCanonicalVocabularyItem,
   type ContentProvenanceType,
@@ -61,6 +63,7 @@ export interface DialogueLineView {
 export interface LessonObjectiveNoteView {
   level: string;
   unitLabel: string;
+  slug?: string;
   title: string;
   description: string;
   trackTitleVi?: string;
@@ -267,7 +270,7 @@ const VOCAB_LIMIT = 8;
 
 export function VocabSection({ words }: { words: VocabView[] }) {
   const { speak, speakAll } = useSoundAndTheme();
-  const { t } = useNativeLanguage();
+  const { t, nativeLanguage } = useNativeLanguage();
   const [expanded, setExpanded] = useState(false);
   const [showRomaji, setShowRomaji] = useState(true);
 
@@ -372,17 +375,25 @@ export function VocabSection({ words }: { words: VocabView[] }) {
                           {canon.scriptType}
                         </span>
                         <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                          {canon.partOfSpeechVi}
+                          {nativeLanguage === "vi"
+                            ? canon.partOfSpeechVi
+                            : t(`pos${canon.partOfSpeech.charAt(0).toUpperCase() + canon.partOfSpeech.slice(1)}`) || canon.partOfSpeech}
                         </span>
                       </div>
                     </div>
 
-                    {/* Cột 3: Nghĩa tiếng Việt & Hán Việt tách biệt */}
+                    {/* Cột 3: Nghĩa đa ngôn ngữ & Hán Việt tách biệt */}
                     <div className="min-w-0">
                       <span className="block break-words text-sm font-bold text-slate-800 dark:text-slate-100">
-                        <LocalizedVocabMeaning japanese={canon.japanese} kana={canon.kana} fallback={canon.meaningVi} />
+                        <LocalizedVocabMeaning
+                          key={`${canon.id}-${nativeLanguage}`}
+                          japanese={canon.japanese}
+                          kana={canon.kana}
+                          fallback={canon.meaningVi}
+                          englishMeaning={findVocabEnglishMeaning(canon.japanese, canon.kana) || undefined}
+                        />
                       </span>
-                      {canon.hanVietNote && (
+                      {nativeLanguage === "vi" && canon.hanVietNote && (
                         <span className="mt-0.5 block text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                           Hán Việt: {canon.hanVietNote}
                         </span>
@@ -433,7 +444,7 @@ export function VocabSection({ words }: { words: VocabView[] }) {
 
 // ─────────────────────────── 0. Mục tiêu bài học & Lưu ý sử dụng ───────────────────────────
 export function LessonObjectivesSection({ info }: { info: LessonObjectiveNoteView }) {
-  const { t } = useNativeLanguage();
+  const { t, nativeLanguage } = useNativeLanguage();
   const prereqMissing = info.prerequisiteLesson && !info.prerequisiteLesson.completed;
 
   return (
@@ -450,7 +461,12 @@ export function LessonObjectivesSection({ info }: { info: LessonObjectiveNoteVie
             </p>
             <p className="mt-1 text-sm font-medium text-amber-900 dark:text-amber-100">
               {t("prereqNotFinished")}{" "}
-              <b className="font-bold">「{info.prerequisiteLesson.title}」</b>. Hãy học theo trình tự để tránh hổng kiến thức, hoặc làm bài kiểm tra miễn học phần nếu bạn đã nắm vững.
+              <b className="font-bold">「<LocalizedLessonTitle slug={info.prerequisiteLesson.slug} fallback={info.prerequisiteLesson.title} />」</b>.{" "}
+              {nativeLanguage === "vi"
+                ? "Hãy học theo trình tự để tránh hổng kiến thức, hoặc làm bài kiểm tra miễn học phần nếu bạn đã nắm vững."
+                : nativeLanguage === "zh-CN" || nativeLanguage === "zh-TW"
+                ? "建议按顺序循序渐进学习，或通过免修测试直接解锁后续内容。"
+                : "Study in sequence for a solid foundation, or take the placement test to unlock."}
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -497,16 +513,52 @@ export function LessonObjectivesSection({ info }: { info: LessonObjectiveNoteVie
           )}
           {info.whyItMatters && (
             <p className="rounded-xl bg-rose-50/70 px-3 py-2 text-xs font-medium text-slate-700 dark:bg-sumi-800/70 dark:text-slate-200">
-              <b>{t("whyItMattersLabel")}</b> {info.whyItMatters}
+              <b>{t("whyItMattersLabel")}</b>{" "}
+              {nativeLanguage === "vi"
+                ? info.whyItMatters
+                : nativeLanguage === "zh-CN" || nativeLanguage === "zh-TW"
+                ? (info.level === "N5"
+                    ? "熟练掌握日文基础书写与发音是流利阅读词汇和语法的必备前提。"
+                    : "掌握核心实用句型，并在日本日常生活与交际场景中自信应用。")
+                : (info.level === "N5"
+                    ? "Mastering fundamental Japanese scripts and pronunciation is essential to reading vocabulary and grammar without relying on Romaji."
+                    : "Apply practical sentence patterns immediately to real-world communication in daily life and in Japan.")}
             </p>
           )}
           <ul className="space-y-1.5 text-xs leading-relaxed text-slate-600 dark:text-slate-300 sm:text-sm">
-            {info.objectives.map((obj, idx) => (
-              <li key={idx} className="flex items-start gap-2">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" aria-hidden />
-                <span>{obj}</span>
-              </li>
-            ))}
+            {nativeLanguage === "vi" ? (
+              info.objectives.map((obj, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" aria-hidden />
+                  <span>{obj}</span>
+                </li>
+              ))
+            ) : (
+              <>
+                <li className="flex items-start gap-2">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" aria-hidden />
+                  <span>
+                    <LocalizedLessonDesc slug={info.slug} fallback={info.description} />
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" aria-hidden />
+                  <span>
+                    {nativeLanguage === "zh-CN" || nativeLanguage === "zh-TW"
+                      ? "掌握本课核心词汇的标准发音、罗马字、日文书写与词义。"
+                      : "Master pronunciation, Romaji, writing, and meaning of the core vocabulary in this lesson."}
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" aria-hidden />
+                  <span>
+                    {nativeLanguage === "zh-CN" || nativeLanguage === "zh-TW"
+                      ? "准确运用本课重点句型并参与实战对话演练，达成 60% 以上测试成绩以同步 SRS。"
+                      : "Accurately apply core grammar patterns in dialogues and score at least 60% on quiz to sync SRS."}
+                  </span>
+                </li>
+              </>
+            )}
           </ul>
         </div>
 
@@ -522,14 +574,31 @@ export function LessonObjectivesSection({ info }: { info: LessonObjectiveNoteVie
           <div className="mt-2.5 space-y-1.5 text-xs leading-relaxed text-slate-700 dark:text-slate-200">
             <p>
               <b>{t("politeStandard")}</b>{" "}
-              <span className="jp-text font-semibold text-slate-900 dark:text-white">{info.registerComparison.standard}</span>
+              <span className="jp-text font-semibold text-slate-900 dark:text-white">
+                {nativeLanguage === "vi"
+                  ? info.registerComparison.standard
+                  : nativeLanguage === "zh-CN" || nativeLanguage === "zh-TW"
+                  ? "标准礼貌体 (丁寧語): 〜です / 〜ます / 〜ませんか"
+                  : "Polite standard (丁寧語): 〜です / 〜ます / 〜ませんか"}
+              </span>
             </p>
             <p>
               <b>{t("casualOrHonorific")}</b>{" "}
-              <span className="jp-text font-semibold text-indigo-700 dark:text-indigo-300">{info.registerComparison.casualOrKeigo}</span>
+              <span className="jp-text font-semibold text-indigo-700 dark:text-indigo-300">
+                {nativeLanguage === "vi"
+                  ? info.registerComparison.casualOrKeigo
+                  : nativeLanguage === "zh-CN" || nativeLanguage === "zh-TW"
+                  ? "亲密体 (タメ口): 〜だ / 动词原型 | 关西腔: おおきに, あかん"
+                  : "Casual (タメ口): 〜だ / Plain dictionary form | Kansai: おおきに, あかん"}
+              </span>
             </p>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              <b>{t("usageContext")}</b> {info.registerComparison.contextNote}
+              <b>{t("usageContext")}</b>{" "}
+              {nativeLanguage === "vi"
+                ? info.registerComparison.contextNote
+                : nativeLanguage === "zh-CN" || nativeLanguage === "zh-TW"
+                ? "初学者 (N5) 在实际生活交流中建议始终使用 丁寧語 (です/ます)，既礼貌又得体。"
+                : "Beginners (N5) should always prioritize 丁寧語 (です/ます) in daily interactions for politeness and respect."}
             </p>
           </div>
         </div>
@@ -541,7 +610,7 @@ export function LessonObjectivesSection({ info }: { info: LessonObjectiveNoteVie
 // ─────────────────────────── 2. Ngữ pháp ───────────────────────────
 export function GrammarSection({ items }: { items: GrammarView[] }) {
   const { speak } = useSoundAndTheme();
-  const { t } = useNativeLanguage();
+  const { t, nativeLanguage } = useNativeLanguage();
 
   return (
     <SectionShell
@@ -569,16 +638,19 @@ export function GrammarSection({ items }: { items: GrammarView[] }) {
                 </div>
                 {g.romaji && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{g.romaji}</p>}
                 <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">
-                  <b>{t("lessonMeaning") || "Ý nghĩa"}:</b> <LocalizedVocabMeaning japanese={g.title} fallback={g.meaning} />
+                  <b>{t("lessonMeaning") || "Ý nghĩa"}:</b>{" "}
+                  <LocalizedGrammarText key={`${g.id}-${nativeLanguage}`} text={g.meaning} keyContext={g.title} />
                 </p>
                 {g.usage && (
                   <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
-                    <b>{t("usageTitle")}</b> {g.usage}
+                    <b>{t("usageTitle")}</b>{" "}
+                    <LocalizedGrammarText key={`${g.id}-usage-${nativeLanguage}`} text={g.usage} keyContext={g.title} />
                   </p>
                 )}
                 {g.commonMistakes && (
                   <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
-                    <b>{t("grammarUsageCaution")}</b> {g.commonMistakes}
+                    <b>{t("grammarUsageCaution")}</b>{" "}
+                    <LocalizedGrammarText key={`${g.id}-mistakes-${nativeLanguage}`} text={g.commonMistakes} keyContext={g.title} />
                   </div>
                 )}
               </div>
@@ -599,7 +671,9 @@ export function GrammarSection({ items }: { items: GrammarView[] }) {
                               <span className="block text-[11px] italic text-slate-400 dark:text-slate-500">{ex.romaji}</span>
                             )}
                             {ex.translation && (
-                              <span className="block text-slate-600 dark:text-slate-300">→ <LocalizedVocabMeaning japanese={ex.japanese} fallback={ex.translation} /></span>
+                              <span className="block text-slate-600 dark:text-slate-300">
+                                → <LocalizedVocabMeaning key={`${g.id}-ex-${i}-${nativeLanguage}`} japanese={ex.japanese} fallback={ex.translation} />
+                              </span>
                             )}
                           </span>
                         </li>
@@ -619,7 +693,7 @@ export function GrammarSection({ items }: { items: GrammarView[] }) {
 // ─────────────────────────── 3. Hội thoại ───────────────────────────
 export function DialogueSection({ lines }: { lines: DialogueLineView[] }) {
   const { speak } = useSoundAndTheme();
-  const { t } = useNativeLanguage();
+  const { t, nativeLanguage } = useNativeLanguage();
 
   return (
     <SectionShell
@@ -654,7 +728,9 @@ export function DialogueSection({ lines }: { lines: DialogueLineView[] }) {
                 <b className="jp-text block text-[15px] font-black leading-snug text-slate-900 dark:text-white">{line.japanese}</b>
                 {line.romaji && <small className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{line.romaji}</small>}
                 {line.translation && (
-                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-300"><LocalizedVocabMeaning japanese={line.japanese} fallback={line.translation} /></p>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                    <LocalizedVocabMeaning key={`${line.id}-${nativeLanguage}`} japanese={line.japanese} fallback={line.translation} />
+                  </p>
                 )}
               </div>
             </article>

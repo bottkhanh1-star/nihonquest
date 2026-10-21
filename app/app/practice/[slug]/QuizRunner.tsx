@@ -7,6 +7,7 @@ import { Button } from "@/components/ui";
 import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 import { notifyProgressUpdated } from "@/components/UserProgressContext";
 import { useNativeLanguage } from "@/components/LanguageContext";
+import { getLocalizedLessonTitle } from "@/lib/lessonLocalization";
 import { SpeakButton } from "./LessonSections";
 import { IconArrowRight, IconCheck, IconClose, IconRefresh } from "./LessonIcons";
 
@@ -30,6 +31,7 @@ interface Exercise {
 
 interface Lesson {
   id: string;
+  slug?: string;
   title: string;
   description: string;
   level?: string;
@@ -58,8 +60,9 @@ function exerciseKind(contentType?: string | null, t?: (k: string) => string) {
 
 // Grammatical explanation helper for Japanese questions
 function getGrammarExplanation(question: string, correctAnswer: string, prompt?: string | null, lang: string = "vi") {
+  const isVi = lang === "vi";
   const isZh = lang === "zh-CN" || lang === "zh-TW";
-  const isEn = lang === "en";
+  const isEn = !isVi && !isZh;
 
   if (prompt && prompt.trim().length > 5) {
     return {
@@ -410,7 +413,9 @@ export function QuizRunner({
             {passed ? (
               <>
                 {t("quizPassedDesc")}{" "}
-                <span className="font-bold text-slate-900 dark:text-white">{lesson.title}</span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {getLocalizedLessonTitle(lesson.slug || lesson.id, nativeLanguage, lesson.title)}
+                </span>
               </>
             ) : (
               t("quizFailedDesc", { passPercent: PASS_PERCENT, needed })
@@ -484,7 +489,9 @@ export function QuizRunner({
           nextLesson ? (
             <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 text-left dark:border-slate-800 dark:bg-sumi-900">
               <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{t("nextLesson")}</span>
-              <h4 className="text-base font-black text-slate-900 dark:text-white">{nextLesson.title}</h4>
+              <h4 className="text-base font-black text-slate-900 dark:text-white">
+                {getLocalizedLessonTitle(nextLesson.slug || nextLesson.id, nativeLanguage, nextLesson.title)}
+              </h4>
               <Link href={`/app/practice/${nextLesson.slug}`} className="block pt-1">
                 <Button variant="torii" size="md" className="w-full">
                   {t("quizNextLesson")} <IconArrowRight width={16} height={16} />
@@ -579,7 +586,7 @@ export function QuizRunner({
             <i className="h-3 w-0.5 rounded bg-red-500" aria-hidden />
             {exerciseKind(currentExercise.contentType, t)}
           </span>
-          <SpeakButton onClick={() => speak(currentExercise.question)} label="Nghe phát âm câu hỏi" />
+          <SpeakButton onClick={() => speak(currentExercise.question)} label={t("listenQuestion") || "Nghe phát âm câu hỏi"} />
         </div>
 
         <h3 className="text-lg font-black leading-snug text-balance text-slate-900 dark:text-white sm:text-xl">{currentExercise.question}</h3>

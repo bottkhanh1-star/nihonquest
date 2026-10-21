@@ -63,11 +63,36 @@ export function LearnKanaPanel({ kana, practiced }: { kana: KanaRow[]; practiced
   const [writing, setWriting] = useState(false);
   const [doneSet, setDoneSet] = useState<Set<string>>(new Set(practiced));
   const { playClick, speak } = useSoundAndTheme();
-  const { t } = useNativeLanguage();
+  const { t, nativeLanguage } = useNativeLanguage();
 
   const samples = useMemo(() => pickSamples(kana, tab), [kana, tab]);
   const selected = samples.find((k) => k.id === selectedId) ?? samples[0] ?? null;
   const cols = COLS[tab].length;
+
+  const getTabLabel = (id: Tab) => {
+    if (id === "DAKUTEN") return t("tabDakutenLabel") || "Biến âm";
+    if (id === "COMBO") return t("tabComboLabel") || "Âm ghép Yōon";
+    return id === "HIRAGANA" ? "Hiragana" : "Katakana";
+  };
+
+  const getTabBlurb = (id: Tab) => {
+    if (nativeLanguage === "vi") return BLURB[id];
+    if (nativeLanguage === "zh-CN" || nativeLanguage === "zh-TW") {
+      const isTw = nativeLanguage === "zh-TW";
+      switch (id) {
+        case "HIRAGANA": return isTw ? "從最基礎的假名開始。" : "从最基础的假名开始。";
+        case "KATAKANA": return isTw ? "用於外來語與外國專有名詞。" : "用于外来语与外国专有名词。";
+        case "DAKUTEN": return isTw ? "添加濁點 ゛ 或半濁點 ゜ 改變發音。" : "添加浊点 ゛ 或半浊点 ゜ 改变发音。";
+        case "COMBO": return isTw ? "大假名與小寫 ゃ ゅ ょ 組合拼讀。" : "大假名与小写 ゃ ゅ ょ 组合拼读。";
+      }
+    }
+    switch (id) {
+      case "HIRAGANA": return "Start from the fundamental basics.";
+      case "KATAKANA": return "Used for loanwords and foreign names.";
+      case "DAKUTEN": return "Add ゛ or ゜ diacritic marks to modify sounds.";
+      case "COMBO": return "Combine base characters with small ゃ ゅ ょ.";
+    }
+  };
 
   const pick = (id: Tab) => {
     playClick();
@@ -114,7 +139,7 @@ export function LearnKanaPanel({ kana, practiced }: { kana: KanaRow[]; practiced
         ))}
       </div>
 
-      <a href="#kana-full" className="lp-more">{t("viewFullKanaTable")} {LABEL[tab]} <IcoArrow width={12} height={12} /></a>
+      <a href="#kana-full" className="lp-more">{t("viewFullKanaTable")} {getTabLabel(tab)} <IcoArrow width={12} height={12} /></a>
 
       {selected && (
         <div className="lp-preview">
@@ -122,9 +147,9 @@ export function LearnKanaPanel({ kana, practiced }: { kana: KanaRow[]; practiced
             {selected.character}
           </div>
           <div className="lp-preview-copy">
-            <b>{LABEL[tab]}</b>
+            <b>{getTabLabel(tab)}</b>
             <span className="lp-preview-romaji">{selected.character} · /{selected.romaji}/</span>
-            <small>{BLURB[tab]}</small>
+            <small>{getTabBlurb(tab)}</small>
             <div className="lp-preview-actions">
               <button type="button" className="lp-btn-red lp-btn-sm" onClick={() => { playClick(); setWriting(true); }}>
                 {t("practiceWritingKana")} <IcoArrow width={13} height={13} />

@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { AppNav } from "@/components/AppNav";
 import { JapanBackdrop, JapanScenicPanel } from "@/components/JapanIllustration";
 import { LocalizedText } from "@/components/LocalizedText";
-import { LocalizedTrackTitle } from "@/components/LocalizedLesson";
+import { LocalizedTrackTitle, LocalizedLessonTitle, LocalizedLessonDesc } from "@/components/LocalizedLesson";
 import { QuizRunner } from "./QuizRunner";
 import {
   DialogueSection,
@@ -279,6 +279,7 @@ export default async function LessonRunnerPage({ params }: { params: { slug: str
   const objectiveInfo: LessonObjectiveNoteView = {
     level: lesson.level,
     unitLabel,
+    slug: lesson.slug,
     title,
     description: lesson.description,
     trackTitleVi: curriculumMeta.textbookTitle,
@@ -323,7 +324,7 @@ export default async function LessonRunnerPage({ params }: { params: { slug: str
               </Link>
               <span aria-hidden>›</span>
               <span className="font-semibold text-slate-800 dark:text-slate-100">
-                {curriculumMeta.chapterLabel}: {title}
+                {curriculumMeta.chapterLabel}: <LocalizedLessonTitle slug={lesson.slug} fallback={title} />
               </span>
             </nav>
 
@@ -341,9 +342,11 @@ export default async function LessonRunnerPage({ params }: { params: { slug: str
 
             <h1 className="mt-3 font-black leading-[1.1] tracking-tight text-slate-900 dark:text-white">
               <span className="text-3xl text-red-600 dark:text-red-400 sm:text-4xl">{curriculumMeta.chapterLabel}:</span>{" "}
-              <span className="text-3xl sm:text-4xl">{title}</span>
+              <span className="text-3xl sm:text-4xl"><LocalizedLessonTitle slug={lesson.slug} fallback={title} /></span>
             </h1>
-            <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-600 dark:text-slate-300">{lesson.description}</p>
+            <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-600 dark:text-slate-300">
+              <LocalizedLessonDesc slug={lesson.slug} fallback={lesson.description} />
+            </p>
 
             <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-medium text-slate-600 dark:text-slate-300">
               <span className="inline-flex items-center gap-2"><IconBook width={18} height={18} /> 4 <LocalizedText k="learningParts" fallback="phần học" /></span>
