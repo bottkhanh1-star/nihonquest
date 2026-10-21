@@ -8,6 +8,7 @@ import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 import { notifyProgressUpdated } from "@/components/UserProgressContext";
 import { useNativeLanguage } from "@/components/LanguageContext";
 import { getLocalizedLessonTitle } from "@/lib/lessonLocalization";
+import { LocalizedQuizText } from "@/lib/quizLocalization";
 import { SpeakButton } from "./LessonSections";
 import { IconArrowRight, IconCheck, IconClose, IconRefresh } from "./LessonIcons";
 
@@ -589,10 +590,12 @@ export function QuizRunner({
           <SpeakButton onClick={() => speak(currentExercise.question)} label={t("listenQuestion") || "Nghe phát âm câu hỏi"} />
         </div>
 
-        <h3 className="text-lg font-black leading-snug text-balance text-slate-900 dark:text-white sm:text-xl">{currentExercise.question}</h3>
+        <h3 className="text-lg font-black leading-snug text-balance text-slate-900 dark:text-white sm:text-xl">
+          <LocalizedQuizText text={currentExercise.question} />
+        </h3>
 
         {displayedOptions.length > 0 ? (
-          <div className="grid gap-2.5" role="group" aria-label="Các đáp án">
+          <div className="grid gap-2.5" role="group" aria-label={t("quizOptionsLabel") || "Các đáp án"}>
             {displayedOptions.map((opt, idx) => {
               const isSelected = selectedAnswer === opt.text;
               const isCorrectOption = normalize(opt.text) === normalize(currentExercise.correctAnswer);
@@ -629,7 +632,9 @@ export function QuizRunner({
                   <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black ${letter}`}>
                     {opt.displayLabel}
                   </span>
-                  <span className="jp-text flex-1 text-base font-bold text-slate-900 dark:text-slate-100">{opt.text}</span>
+                  <span className="jp-text flex-1 text-base font-bold text-slate-900 dark:text-slate-100">
+                    <LocalizedQuizText text={opt.text} />
+                  </span>
                   {isSelected && !hasChecked && (
                     <span className="grid h-6 w-6 place-items-center rounded-full bg-red-600 text-white">
                       <IconCheck width={14} height={14} strokeWidth={3} />
@@ -697,12 +702,14 @@ export function QuizRunner({
               </div>
               {!isCurrentCorrect && (
                 <p className="mt-0.5 text-sm">
-                  {t("correctAnswerLabel") || "Đáp án đúng:"} <span className="jp-text font-black">{currentExercise.correctAnswer}</span>
+                  {t("correctAnswerLabel") || "Đáp án đúng:"} <span className="jp-text font-black"><LocalizedQuizText text={currentExercise.correctAnswer} /></span>
                 </p>
               )}
               {explanation && (
                 <>
-                  <p className="mt-1.5 text-xs leading-relaxed text-slate-700 dark:text-slate-300">{explanation.breakdown}</p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+                    <LocalizedQuizText text={explanation.breakdown} />
+                  </p>
                   <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">💡 {explanation.rule}</p>
                 </>
               )}

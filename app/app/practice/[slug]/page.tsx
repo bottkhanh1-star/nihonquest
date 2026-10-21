@@ -8,7 +8,14 @@ import { prisma } from "@/lib/prisma";
 import { AppNav } from "@/components/AppNav";
 import { JapanBackdrop, JapanScenicPanel } from "@/components/JapanIllustration";
 import { LocalizedText } from "@/components/LocalizedText";
-import { LocalizedTrackTitle, LocalizedLessonTitle, LocalizedLessonDesc } from "@/components/LocalizedLesson";
+import {
+  LocalizedTrackTitle,
+  LocalizedShortTrackLabel,
+  LocalizedLessonTitle,
+  LocalizedLessonDesc,
+  LocalizedChapterLabel,
+  LocalizedProvenance,
+} from "@/components/LocalizedLesson";
 import { QuizRunner } from "./QuizRunner";
 import {
   DialogueSection,
@@ -245,7 +252,7 @@ export default async function LessonRunnerPage({ params }: { params: { slug: str
     })),
   }));
 
-  // Hội thoại: ưu tiên câu ví dụ ngữ pháp (câu tiếng Nhật thật), fallback sang câu hỏi của bài tập
+  // Hội thoại: ưu tiên câu ví dụ ngữ pháp (câu tiếng Nhật thật)
   const grammarSentences = resolvedGrammar.flatMap((g) =>
     g.examples.map((e) => ({
       japanese: e.japanese,
@@ -254,7 +261,7 @@ export default async function LessonRunnerPage({ params }: { params: { slug: str
     }))
   );
 
-  let dialogue: DialogueLineView[];
+  let dialogue: DialogueLineView[] = [];
   if (grammarSentences.length >= 2) {
     dialogue = grammarSentences.slice(0, 4).map((s, i) => ({
       id: `grammar-${i}`,
@@ -262,16 +269,42 @@ export default async function LessonRunnerPage({ params }: { params: { slug: str
       ...s,
     }));
   } else {
-    const fromExercises = lesson.exercises.filter((ex) => ex.prompt || HAS_JAPANESE.test(ex.question));
-    dialogue = (fromExercises.length ? fromExercises : lesson.exercises).slice(0, 4).map((ex, i) => ({
-      id: ex.id,
-      side: i % 2 === 0 ? "a" : "b",
-      japanese: ex.question,
-      translation: ex.prompt ?? undefined,
-    }));
+    // Chỉ lấy câu hỏi bài tập nếu thuần túy tiếng Nhật (không phải câu hỏi tiếng Việt chứa ký tự Nhật)
+    const VIETNAMESE_LETTERS = /[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ]/i;
+    const realJapaneseExercises = lesson.exercises.filter(
+      (ex) => HAS_JAPANESE.test(ex.question) && !VIETNAMESE_LETTERS.test(ex.question)
+    );
+    if (realJapaneseExercises.length > 0) {
+      dialogue = realJapaneseExercises.slice(0, 4).map((ex, i) => ({
+        id: ex.id,
+        side: i % 2 === 0 ? "a" : "b",
+        japanese: ex.question,
+        translation: ex.prompt ?? undefined,
+      }));
+    }
   }
 
-  const heroLine = dialogue.find((line) => HAS_JAPANESE.test(line.japanese));
+  // Hero line: nếu là bài Kana, tạo hero kana đẹp từ bài học thay vì hiển thị câu hỏi tiếng Việt
+  let heroLine: { japanese: string; romaji?: string } | undefined;
+  if (
+    lesson.slug.startsWith("hiragana-") ||
+    lesson.slug.startsWith("katakana-") ||
+    lesson.slug.startsWith("dakuten-") ||
+    lesson.slug.startsWith("yoon-")
+  ) {
+    const kanaMatch = lesson.title.match(/[\(（]([ぁ-んァ-ン・\s]+)[\)）]/);
+    if (kanaMatch) {
+      heroLine = {
+        japanese: kanaMatch[1].trim(),
+        romaji: lesson.slug.replace(/^(hiragana|katakana|dakuten|yoon)-/, "").split("-").join(" · "),
+      };
+    } else {
+      heroLine = { japanese: "あ・い・う・え・お", romaji: "a · i · u · e · o" };
+    }
+  } else {
+    heroLine = dialogue.find((line) => HAS_JAPANESE.test(line.japanese)) || (grammarSentences[0] ? { japanese: grammarSentences[0].japanese, romaji: grammarSentences[0].romaji } : undefined);
+  }
+
   const title = cleanLessonTitle(lesson.title);
   const levelLabel = LEVEL_LABEL[lesson.level] ?? lesson.level;
   const curriculumMeta = getLessonCurriculumMetadata(lesson);
@@ -315,7 +348,7 @@ export default async function LessonRunnerPage({ params }: { params: { slug: str
         <section data-intro className="grid items-center gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
           <div className="min-w-0">
             <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-              <Link href="/app" aria-label="Trang chủ" className="hover:text-slate-900 dark:hover:text-white">
+              <Link href="/app" aria-label="Dashboard" className="hover:text-slate-900 dark:hover:text-white">
                 <IconHome width={18} height={18} />
               </Link>
               <span aria-hidden>›</span>
@@ -324,7 +357,7 @@ export default async function LessonRunnerPage({ params }: { params: { slug: str
               </Link>
               <span aria-hidden>›</span>
               <span className="font-semibold text-slate-800 dark:text-slate-100">
-                {curriculumMeta.chapterLabel}: <LocalizedLessonTitle slug={lesson.slug} fallback={title} />
+                <LocalizedChapterLabel label={curriculumMeta.chapterLabel} />: <LocalizedLessonTitle slug={lesson.slug} fallback={title} />
               </span>
             </nav>
 
@@ -333,15 +366,15 @@ export default async function LessonRunnerPage({ params }: { params: { slug: str
                 <LocalizedText k="jlptOrientation" fallback="Định hướng" /> JLPT {lesson.level}
               </span>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-sumi-800 dark:text-slate-200">
-                📚 <LocalizedTrackTitle trackId={curriculumMeta.trackId} fallback={curriculumMeta.shortTrackLabel} />
+                📚 <LocalizedShortTrackLabel label={curriculumMeta.shortTrackLabel} />
               </span>
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
-                ✓ <LocalizedText k={curriculumMeta.provenance === "TEXTBOOK_VERIFIED" ? "badgeTextbookVerified" : "badgeSupplementaryVerified"} fallback={curriculumMeta.provenanceLabelVi} />
+                ✓ <LocalizedProvenance label={curriculumMeta.provenanceLabelVi} provenance={curriculumMeta.provenance} />
               </span>
             </div>
 
             <h1 className="mt-3 font-black leading-[1.1] tracking-tight text-slate-900 dark:text-white">
-              <span className="text-3xl text-red-600 dark:text-red-400 sm:text-4xl">{curriculumMeta.chapterLabel}:</span>{" "}
+              <span className="text-3xl text-red-600 dark:text-red-400 sm:text-4xl"><LocalizedChapterLabel label={curriculumMeta.chapterLabel} />:</span>{" "}
               <span className="text-3xl sm:text-4xl"><LocalizedLessonTitle slug={lesson.slug} fallback={title} /></span>
             </h1>
             <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-600 dark:text-slate-300">

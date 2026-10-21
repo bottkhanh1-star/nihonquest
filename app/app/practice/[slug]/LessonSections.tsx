@@ -6,7 +6,12 @@ import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 import { useNativeLanguage } from "@/components/LanguageContext";
 import { LocalizedVocabMeaning, findVocabEnglishMeaning } from "@/lib/vocabLocalization";
 import { LocalizedGrammarText } from "@/lib/grammarLocalization";
-import { LocalizedLessonTitle, LocalizedLessonDesc } from "@/components/LocalizedLesson";
+import {
+  LocalizedLessonTitle,
+  LocalizedLessonDesc,
+  LocalizedChapterLabel,
+  LocalizedProvenance,
+} from "@/components/LocalizedLesson";
 import {
   toCanonicalVocabularyItem,
   type ContentProvenanceType,
@@ -497,18 +502,23 @@ export function LessonObjectivesSection({ info }: { info: LessonObjectiveNoteVie
                 🎯
               </span>
               <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-100">
-                {t("objectivesAndSource")} ({info.chapterLabel || `Unit ${info.unitLabel}`})
+                {t("objectivesAndSource")} (<LocalizedChapterLabel label={info.chapterLabel || `Unit ${info.unitLabel}`} />)
               </h2>
             </div>
             {info.provenanceLabelVi && (
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
-                ✓ {info.provenanceLabelVi}
+                ✓ <LocalizedProvenance label={info.provenanceLabelVi} provenance={info.provenanceStatus} />
               </span>
             )}
           </div>
           {info.sourceReference && (
             <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              📚 {t("referenceSource")} <span className="text-slate-700 dark:text-slate-200">{info.sourceReference}</span>
+              📚 {t("referenceSource")}{" "}
+              <span className="text-slate-700 dark:text-slate-200">
+                {info.sourceReference.includes("prisma/seed-data")
+                  ? (nativeLanguage === "vi" ? "Chương trình chuẩn Gojūon (五十音図)" : "Standard Gojūon Syllabus (五十音図)")
+                  : info.sourceReference}
+              </span>
             </p>
           )}
           {info.whyItMatters && (
