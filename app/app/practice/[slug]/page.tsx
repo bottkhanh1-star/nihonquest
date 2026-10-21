@@ -343,7 +343,7 @@ export default async function LessonRunnerPage({ params }: { params: { slug: str
       <JapanBackdrop />
       <AppNav />
 
-      <div className="mx-auto w-full max-w-[1240px] space-y-6">
+      <main className="mx-auto w-full max-w-[1240px] space-y-6 px-4 pt-6 pb-28 sm:px-6 sm:pt-8 sm:pb-20">
         {/* ───────── Hero ───────── */}
         <section data-intro className="grid items-center gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
           <div className="min-w-0">
@@ -432,7 +432,7 @@ export default async function LessonRunnerPage({ params }: { params: { slug: str
             />
           </SectionShell>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
