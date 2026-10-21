@@ -554,6 +554,38 @@ export const CORE_VOCAB_MAP: Record<string, VocabTranslationEntry> = {
   },
 };
 
+import jlptVocabEnRaw from "@/lib/jlpt-vocab-en.json";
+import { JOUYOU_KANJI_LIST } from "@/lib/jouyou-kanji-data";
+
+const jlptVocabEn = jlptVocabEnRaw as Record<string, string>;
+
+const kanjiEnglishMap = new Map<string, string>();
+for (const k of JOUYOU_KANJI_LIST) {
+  if (k.character && k.meaningEn) {
+    kanjiEnglishMap.set(k.character, k.meaningEn);
+  }
+}
+
+/**
+ * Finds offline English meaning for a vocabulary word or kanji character.
+ */
+export function findVocabEnglishMeaning(japanese: string, kana?: string): string | null {
+  const cleanJa = (japanese || "").trim();
+  if (cleanJa && jlptVocabEn[cleanJa]) {
+    return jlptVocabEn[cleanJa];
+  }
+  if (kana) {
+    const cleanKana = kana.trim();
+    if (cleanKana && jlptVocabEn[cleanKana]) {
+      return jlptVocabEn[cleanKana];
+    }
+  }
+  if (cleanJa && kanjiEnglishMap.has(cleanJa)) {
+    return kanjiEnglishMap.get(cleanJa)!;
+  }
+  return null;
+}
+
 /**
  * Checks the pre-compiled dictionary first.
  */
@@ -570,6 +602,16 @@ export function getPrecompiledVocabMeaning(
     if (entry && entry[lang]) {
       return entry[lang]!;
     }
+  }
+
+  if (lang === "en") {
+    const en = findVocabEnglishMeaning(japanese, kana);
+    if (en) return en;
+  }
+
+  // Fallback to English from curated table if available
+  for (const k of keyCandidates) {
+    const entry = CORE_VOCAB_MAP[k];
     if (entry && entry.en) {
       return entry.en;
     }
@@ -578,7 +620,71 @@ export function getPrecompiledVocabMeaning(
 }
 
 // Client-side translation memory cache
-const clientCache = new Map<string, string>();
+export const clientCache = new Map<string, string>();
+
+/**
+ * Batch pre-translates multiple vocabulary/kanji items ahead of time
+ * to populate clientCache and avoid runtime translation lag during review.
+ */
+export async function prefetchVocabTranslations(
+  items: Array<{ japanese: string; kana?: string; fallback?: string }>,
+  targetLang: NativeLanguage
+): Promise<void> {
+  if (targetLang === "vi" || !items || items.length === 0) return;
+
+  const needed: string[] = [];
+  for (const item of items) {
+    const text = (item.japanese || "").trim();
+    if (!text) continue;
+
+    // Check precompiled dictionary
+    const direct = getPrecompiledVocabMeaning(text, item.kana, targetLang);
+    if (direct) continue;
+
+    const cacheKey = `${targetLang}:${text}`;
+    if (clientCache.has(cacheKey)) continue;
+
+    try {
+      const lsKey = `nq_tr_${cacheKey}`;
+      const saved = localStorage.getItem(lsKey);
+      if (saved) {
+        clientCache.set(cacheKey, saved);
+        continue;
+      }
+    } catch {}
+
+    needed.push(text);
+  }
+
+  if (needed.length === 0) return;
+
+  try {
+    const res = await fetch("/api/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        texts: needed,
+        targetLang,
+        sourceLang: "ja",
+      }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.translations && typeof data.translations === "object") {
+      for (const [orig, tr] of Object.entries(data.translations as Record<string, string>)) {
+        if (tr && typeof tr === "string") {
+          const cacheKey = `${targetLang}:${orig}`;
+          clientCache.set(cacheKey, tr);
+          try {
+            localStorage.setItem(`nq_tr_${cacheKey}`, tr);
+          } catch {}
+        }
+      }
+    }
+  } catch {
+    // Graceful fallback
+  }
+}
 
 /**
  * Resolves localized vocabulary meaning.
@@ -593,23 +699,35 @@ export function useVocabTranslation(
 ): string {
   const { nativeLanguage } = useNativeLanguage();
 
-  const [meaning, setMeaning] = useState<string>(() => {
+  const resolveImmediate = (): string => {
     if (nativeLanguage === "vi") return fallbackMeaning;
     if (nativeLanguage === "en" && englishMeaning) return englishMeaning;
     const direct = getPrecompiledVocabMeaning(japanese, kana, nativeLanguage);
     if (direct) return direct;
     const cacheKey = `${nativeLanguage}:${japanese}`;
     if (clientCache.has(cacheKey)) return clientCache.get(cacheKey)!;
-    return englishMeaning || fallbackMeaning;
-  });
+    try {
+      const lsKey = `nq_tr_${cacheKey}`;
+      const saved = typeof window !== "undefined" ? localStorage.getItem(lsKey) : null;
+      if (saved) {
+        clientCache.set(cacheKey, saved);
+        return saved;
+      }
+    } catch {}
+    return englishMeaning || findVocabEnglishMeaning(japanese, kana) || fallbackMeaning;
+  };
+
+  const [meaning, setMeaning] = useState<string>(resolveImmediate);
 
   useEffect(() => {
     if (nativeLanguage === "vi") {
       setMeaning(fallbackMeaning);
       return;
     }
-    if (nativeLanguage === "en" && englishMeaning) {
-      setMeaning(englishMeaning);
+
+    const resolvedEn = englishMeaning || findVocabEnglishMeaning(japanese, kana);
+    if (nativeLanguage === "en" && resolvedEn) {
+      setMeaning(resolvedEn);
       return;
     }
 
@@ -665,7 +783,7 @@ export function useVocabTranslation(
       .catch(() => {
         // Fallback gracefully to english or original meaning
         if (isSubscribed) {
-          setMeaning(englishMeaning || fallbackMeaning);
+          setMeaning(resolvedEn || fallbackMeaning);
         }
       });
 

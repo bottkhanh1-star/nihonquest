@@ -10,7 +10,8 @@ import { notifyProgressUpdated } from "@/components/UserProgressContext";
 import { getReviewFrontPrompt, type EnrichedReviewItem } from "@/lib/review/resolveReviewItem";
 import { updateSrs } from "@/lib/srs";
 import { useNativeLanguage } from "@/components/LanguageContext";
-import { LocalizedVocabMeaning } from "@/lib/vocabLocalization";
+import { LocalizedVocabMeaning, prefetchVocabTranslations, findVocabEnglishMeaning } from "@/lib/vocabLocalization";
+import { LocalizedGrammarText } from "@/lib/grammarLocalization";
 
 type Grade = "AGAIN" | "HARD" | "GOOD" | "EASY";
 
@@ -224,6 +225,17 @@ export function ReviewClient({ initial, backgrounds = [] }: { initial: EnrichedR
   const [sessionTotal] = useState(initial.length);
   const [done, setDone] = useState(0);
 
+  // Batch prefetch translations for all cards in the queue whenever items or language change
+  useEffect(() => {
+    if (nativeLanguage === "vi" || !items.length) return;
+    const toPrefetch = items.map((item) => ({
+      japanese: item.title,
+      kana: item.reading,
+      fallback: item.extra || item.subtitle,
+    }));
+    prefetchVocabTranslations(toPrefetch, nativeLanguage);
+  }, [items, nativeLanguage]);
+
   const currentItem = items[currentIndex];
 
   const handleGrade = useCallback(
@@ -250,14 +262,13 @@ export function ReviewClient({ initial, backgrounds = [] }: { initial: EnrichedR
         setIsFlipped(false);
 
         if (grade === "AGAIN") {
-          // Move the card to the back of the session queue. The old code spliced
-          // then pushed within one array, so length never changed and the last
-          // card re-rendered itself instead of wrapping to index 0.
+          // Move the card to the back of the session queue.
+          // The next card in sequence is now shifted into currentIndex.
           const requeued = [...items];
           const [card] = requeued.splice(currentIndex, 1);
           requeued.push(card);
           setItems(requeued);
-          setCurrentIndex(currentIndex + 1 >= requeued.length ? 0 : currentIndex + 1);
+          setCurrentIndex((idx) => (idx >= requeued.length ? 0 : idx));
         } else {
           const nextItems = items.filter((_, idx) => idx !== currentIndex);
           setItems(nextItems);
@@ -327,7 +338,7 @@ export function ReviewClient({ initial, backgrounds = [] }: { initial: EnrichedR
         goStep(e.key === "ArrowRight" ? 1 : -1);
         return;
       }
-      if (e.key === " " || e.code === "Space") {
+      if ((e.key === " " || e.code === "Space") && !submitting) {
         e.preventDefault();
         if (!e.repeat) setIsFlipped((f) => !f);
         return;
@@ -341,7 +352,7 @@ export function ReviewClient({ initial, backgrounds = [] }: { initial: EnrichedR
     return () => window.removeEventListener("keydown", handler);
   }, [isFlipped, submitting, handleGrade, goStep]);
 
-  if (!items.length) {
+  if (!items.length || !currentItem) {
     return (
       <div className="rv-empty">
         <EmptyState
@@ -433,10 +444,24 @@ export function ReviewClient({ initial, backgrounds = [] }: { initial: EnrichedR
                   {currentItem.japaneseWithReading || currentItem.title}
                 </p>
 
-                {/* 3. Nghĩa tiếng Việt & Hán Việt tách biệt */}
+                {/* 3. Nghĩa đa ngôn ngữ & Hán Việt tách biệt */}
                 {meaning && (
                   <p className="rv-meaning">
-                    <LocalizedVocabMeaning japanese={currentItem.title} kana={currentItem.reading} fallback={meaning} />
+                    {currentItem.contentType === "GRAMMAR" ? (
+                      <LocalizedGrammarText
+                        key={`${currentItem.id}-${nativeLanguage}`}
+                        text={meaning}
+                        keyContext={currentItem.title}
+                      />
+                    ) : (
+                      <LocalizedVocabMeaning
+                        key={`${currentItem.id}-${nativeLanguage}`}
+                        japanese={currentItem.title}
+                        kana={currentItem.reading}
+                        fallback={meaning}
+                        englishMeaning={findVocabEnglishMeaning(currentItem.title, currentItem.reading) || undefined}
+                      />
+                    )}
                   </p>
                 )}
                 {currentItem.hanVietNote && nativeLanguage === "vi" && (

@@ -14,15 +14,21 @@ async function fetchGoogleTranslate(text: string, targetLang: string, sourceLang
   else if (tl === "zh-TW") tl = "zh-TW";
   else if (tl.includes("-")) tl = tl.split("-")[0];
 
+  let sl = sourceLang;
+  const hasJapanese = /[\u3000-\u30ff\u4e00-\u9faf]/.test(text);
+  if (!hasJapanese && sl === "ja") {
+    sl = "auto";
+  }
+
   const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(
-    sourceLang
+    sl
   )}&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text.trim())}`;
 
   const res = await fetch(url, {
     headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     },
-    next: { revalidate: 86400 },
+    signal: AbortSignal.timeout(6000),
   });
 
   if (!res.ok) {
@@ -40,9 +46,38 @@ async function fetchGoogleTranslate(text: string, targetLang: string, sourceLang
   return text;
 }
 
+async function fetchMyMemoryTranslate(text: string, targetLang: string, sourceLang: string = "ja"): Promise<string> {
+  let tl = targetLang;
+  if (tl === "zh-CN") tl = "zh-CN";
+  else if (tl === "zh-TW") tl = "zh-TW";
+  else if (tl.includes("-")) tl = tl.split("-")[0];
+
+  let sl = sourceLang === "auto" ? "ja" : sourceLang;
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.trim())}&langpair=${encodeURIComponent(sl)}|${encodeURIComponent(tl)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+  if (!res.ok) throw new Error("MyMemory error");
+  const data = await res.json();
+  if (data?.responseData?.translatedText) {
+    return data.responseData.translatedText;
+  }
+  return text;
+}
+
+async function translateTextSafe(text: string, targetLang: string, sourceLang: string = "ja"): Promise<string> {
+  try {
+    return await fetchGoogleTranslate(text, targetLang, sourceLang);
+  } catch {
+    try {
+      return await fetchMyMemoryTranslate(text, targetLang, sourceLang);
+    } catch {
+      return text;
+    }
+  }
+}
+
 /**
  * Translates a list of strings efficiently by joining them with a distinctive delimiter
- * into a single Google Translate request instead of making N separate requests.
+ * into a single translation request instead of making N separate requests.
  */
 async function translateBatchFast(
   items: string[],
@@ -56,7 +91,7 @@ async function translateBatchFast(
   const joined = items.join(DELIM);
 
   try {
-    const translatedBlob = await fetchGoogleTranslate(joined, targetLang, sourceLang);
+    const translatedBlob = await translateTextSafe(joined, targetLang, sourceLang);
     const parts = translatedBlob.split(/__@@__/i).map((s) => s.trim());
     if (parts.length === items.length) {
       for (let i = 0; i < items.length; i++) {
@@ -75,7 +110,7 @@ async function translateBatchFast(
     await Promise.all(
       chunk.map(async (item) => {
         try {
-          result[item] = await fetchGoogleTranslate(item, targetLang, sourceLang);
+          result[item] = await translateTextSafe(item, targetLang, sourceLang);
         } catch {
           result[item] = item;
         }
@@ -141,7 +176,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ translation: translationCache.get(cacheKey) });
     }
 
-    const translated = await fetchGoogleTranslate(text, targetLang, sourceLang);
+    const translated = await translateTextSafe(text, targetLang, sourceLang);
     if (translationCache.size >= MAX_CACHE_SIZE) {
       const firstKey = translationCache.keys().next().value;
       if (firstKey) translationCache.delete(firstKey);
