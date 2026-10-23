@@ -230,11 +230,12 @@ export function useSenseiVoice(character: SenseiCharacter) {
       const rate = opts.rate ?? rateRef.current;
 
       const hasJa = raw.some(isJa);
-      const isCloudSelected = speechVoiceURI.startsWith("cloud:");
-      // Nếu chọn giọng Cloud HOẶC máy không có giọng tiếng Nhật HOẶC nhân vật Nam không có giọng nam tự nhiên
-      if (isCloudSelected || !hasJa || (ch.gender === "male" && !exact)) {
+      const isSpecialVoice = speechVoiceURI.startsWith("cloud:") || speechVoiceURI.startsWith("browser:") || speechVoiceURI.startsWith("gtts:");
+      // Nếu chọn giọng đặc biệt HOẶC máy không có giọng tiếng Nhật HOẶC nhân vật Nam không có giọng nam tự nhiên
+      if (isSpecialVoice || !hasJa || (ch.gender === "male" && !exact)) {
         setIsSpeaking(true);
-        const cloudVoiceParam = isCloudSelected ? speechVoiceURI.slice("cloud:".length) : undefined;
+        // Pass the voice ID directly to playSenseiAudio (it handles all formats)
+        const cloudVoiceParam = isSpecialVoice ? speechVoiceURI : undefined;
         playSenseiAudio(
           text,
           ch.gender,
@@ -317,7 +318,7 @@ export function useSenseiVoice(character: SenseiCharacter) {
             if (id !== runId.current) return;
             if (e.error !== "canceled" && e.error !== "interrupted") {
               // Fallback to Cloud TTS WebAudio
-              const cloudVoiceParam = speechVoiceURI.startsWith("cloud:") ? speechVoiceURI.slice("cloud:".length) : undefined;
+              const senseiVoiceParam = (speechVoiceURI.startsWith("cloud:") || speechVoiceURI.startsWith("browser:") || speechVoiceURI.startsWith("gtts:")) ? speechVoiceURI : undefined;
               playSenseiAudio(
                 s,
                 ch.gender,
@@ -329,7 +330,7 @@ export function useSenseiVoice(character: SenseiCharacter) {
                     show("closed");
                   }
                 },
-                cloudVoiceParam
+                senseiVoiceParam
               ).then((p) => {
                 if (id === runId.current && p) activeAudioPlayback.current = p;
               });

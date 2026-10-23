@@ -2,11 +2,15 @@
 
 import type { Viseme } from "./senseiLipSync";
 import { getVoiceDspProfile, applyVoiceDsp } from "./voiceDsp";
+import { CLOUD_VOICES, findBrowserVoice } from "./cloudTtsVoices";
 
 /**
  * Web Audio DSP audio player for realistic Japanese Male / Female voice synthesis.
  * Uses real-time frequency analysis to drive accurate mouth visemes.
- * Includes multi-tier TTS fallback (cached /api/ai/tts -> direct Google TTS mirror -> HTMLAudioElement).
+ *
+ * Now supports two modes:
+ * 1. Browser speechSynthesis (primary, for "browser:" voices)
+ * 2. Google Translate TTS fallback (when no browser voices available)
  */
 let audioCtx: AudioContext | null = null;
 
@@ -30,6 +34,11 @@ export interface WebAudioPlayback {
   stop: () => void;
 }
 
+/**
+ * Play TTS for Sensei using browser speechSynthesis or Google TTS fallback.
+ * 
+ * @param voiceParam - The voice ID (e.g., "browser:Nanami", "browser:Keita", or legacy "edge:...")
+ */
 export async function playSenseiAudio(
   text: string,
   gender: "male" | "female",
@@ -40,15 +49,10 @@ export async function playSenseiAudio(
 ): Promise<WebAudioPlayback | null> {
   if (typeof window === "undefined" || !text) return null;
 
-  const voiceToUse = voiceParam || (gender === "male" ? "edge:ja-JP-KeitaNeural" : "edge:ja-JP-NanamiNeural");
-  const encoded = encodeURIComponent(text.slice(0, 300));
-  const primaryUrl = `/api/ai/tts?text=${encoded}&voice=${encodeURIComponent(voiceToUse)}&v=edge5`;
-  const directMirrorUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ja&client=tw-ob`;
-
   let stopped = false;
-  let activeSource: AudioBufferSourceNode | null = null;
   let activeAudioElement: HTMLAudioElement | null = null;
   let animId = 0;
+  let activeUtterance: SpeechSynthesisUtterance | null = null;
 
   const handleStop = () => {
     if (stopped) return;
@@ -56,11 +60,11 @@ export async function playSenseiAudio(
     cancelAnimationFrame(animId);
     onViseme("closed");
 
-    if (activeSource) {
+    if (activeUtterance) {
       try {
-        activeSource.stop();
+        window.speechSynthesis.cancel();
       } catch {}
-      activeSource = null;
+      activeUtterance = null;
     }
 
     if (activeAudioElement) {
@@ -77,15 +81,119 @@ export async function playSenseiAudio(
     stop: handleStop,
   };
 
-  const ctx = getAudioContext();
+  const encoded = encodeURIComponent(text.slice(0, 300));
+  const directMirrorUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ja&client=tw-ob`;
 
-  // Helper to run viseme animation from standard HTMLAudioElement when WebAudio decode fails
+  // ── Try browser speechSynthesis first ──
+  if ("speechSynthesis" in window) {
+    const allVoices = window.speechSynthesis.getVoices();
+    let targetSpeechVoice: SpeechSynthesisVoice | null = null;
+
+    if (voiceParam) {
+      // Handle "browser:Nanami" format
+      if (voiceParam.startsWith("browser:")) {
+        targetSpeechVoice = findBrowserVoice(voiceParam, allVoices);
+      }
+      // Handle legacy "edge:ja-JP-NanamiNeural" format
+      else if (voiceParam.startsWith("edge:")) {
+        const legacyMap: Record<string, string> = {
+          "edge:ja-JP-NanamiNeural": "browser:Nanami",
+          "edge:ja-JP-KeitaNeural": "browser:Keita",
+        };
+        const mapped = legacyMap[voiceParam] || (voiceParam.includes("Keita") ? "browser:Keita" : "browser:Nanami");
+        targetSpeechVoice = findBrowserVoice(mapped, allVoices);
+      }
+    }
+
+    // If no specific match, try to find a voice matching the gender
+    if (!targetSpeechVoice) {
+      const genderVoices = CLOUD_VOICES.filter(
+        (v) => v.provider === "browser" && v.gender === gender && v.matchPatterns.length > 0
+      );
+      for (const cv of genderVoices) {
+        const found = findBrowserVoice(cv.id, allVoices);
+        if (found) {
+          targetSpeechVoice = found;
+          break;
+        }
+      }
+    }
+
+    // If still no match, find ANY Japanese voice
+    if (!targetSpeechVoice) {
+      targetSpeechVoice = allVoices.find(
+        (v) => (v.lang || "").toLowerCase().startsWith("ja")
+      ) ?? null;
+    }
+
+    if (targetSpeechVoice) {
+      // Use speechSynthesis with viseme animation
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "ja-JP";
+      u.voice = targetSpeechVoice;
+      u.rate = 1;
+      activeUtterance = u;
+
+      const visemeCycle: Viseme[] = ["a", "i", "u", "e", "o"];
+      let vIdx = 0;
+      let lastVChange = performance.now();
+
+      const animateVisemes = () => {
+        if (stopped) return;
+        const now = performance.now();
+        if (now - lastVChange > 120) {
+          lastVChange = now;
+          vIdx = (vIdx + 1) % visemeCycle.length;
+          onViseme(visemeCycle[vIdx]);
+        }
+        animId = requestAnimationFrame(animateVisemes);
+      };
+
+      u.onstart = () => {
+        if (stopped) return;
+        onStart();
+        animId = requestAnimationFrame(animateVisemes);
+      };
+
+      u.onboundary = (e) => {
+        if (stopped) return;
+        // Reset viseme cycling on word boundary for more natural look
+        vIdx = e.charIndex % visemeCycle.length;
+      };
+
+      u.onend = () => {
+        if (stopped) return;
+        stopped = true;
+        cancelAnimationFrame(animId);
+        onViseme("closed");
+        onEnd();
+      };
+
+      u.onerror = (e) => {
+        if (stopped) return;
+        if (e.error !== "canceled" && e.error !== "interrupted") {
+          // Fall back to Google TTS
+          playViaAudioElement(directMirrorUrl);
+        } else {
+          stopped = true;
+          cancelAnimationFrame(animId);
+          onViseme("closed");
+          onEnd();
+        }
+      };
+
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+      return playbackController;
+    }
+  }
+
+  // ── Fallback: Google Translate TTS via HTMLAudioElement ──
   const playViaAudioElement = (url: string) => {
     if (stopped) return;
     try {
       const audio = new Audio(url);
       activeAudioElement = audio;
-      audio.playbackRate = gender === "male" ? 0.9 : 1.0;
 
       const visemeCycle: Viseme[] = ["a", "i", "u", "e", "o"];
       let vIdx = 0;
@@ -118,25 +226,17 @@ export async function playSenseiAudio(
 
       audio.onerror = () => {
         if (stopped) return;
-        if (url !== directMirrorUrl) {
-          playViaAudioElement(directMirrorUrl);
-        } else {
-          stopped = true;
-          cancelAnimationFrame(animId);
-          onViseme("closed");
-          onEnd();
-        }
+        stopped = true;
+        cancelAnimationFrame(animId);
+        onViseme("closed");
+        onEnd();
       };
 
       audio.play().catch(() => {
-        if (url !== directMirrorUrl) {
-          playViaAudioElement(directMirrorUrl);
-        } else {
-          stopped = true;
-          cancelAnimationFrame(animId);
-          onViseme("closed");
-          onEnd();
-        }
+        stopped = true;
+        cancelAnimationFrame(animId);
+        onViseme("closed");
+        onEnd();
       });
     } catch {
       stopped = true;
@@ -146,97 +246,8 @@ export async function playSenseiAudio(
     }
   };
 
-  // Try fetching audio array buffer for WebAudio DSP
-  let arrayBuffer: ArrayBuffer | null = null;
-  let isAuthenticNeural = false;
-  try {
-    const res = await fetch(primaryUrl);
-    if (res.ok) {
-      const pHeader = res.headers.get("x-tts-provider") || "";
-      isAuthenticNeural = pHeader.startsWith("edge:") && !pHeader.includes("fallback");
-      arrayBuffer = await res.arrayBuffer();
-    }
-  } catch {}
-
-  // Fallback to direct mirror fetch if primary failed
-  if (!arrayBuffer) {
-    try {
-      const mirrorRes = await fetch(directMirrorUrl);
-      if (mirrorRes.ok) {
-        arrayBuffer = await mirrorRes.arrayBuffer();
-      }
-    } catch {}
-  }
-
-  // If fetch failed or ctx unavailable, fallback to HTMLAudioElement
-  if (!arrayBuffer || !ctx) {
-    playViaAudioElement(primaryUrl);
-    return playbackController;
-  }
-
-  // Decode audio data via Web Audio API
-  try {
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-    if (stopped) return null;
-
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
-    activeSource = source;
-
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 256;
-
-    // Apply persona speed settings
-    const dspProfile = getVoiceDspProfile(voiceToUse);
-    applyVoiceDsp(ctx, source, dspProfile, analyser);
-
-    analyser.connect(ctx.destination);
-
-    let isPlaying = true;
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-    const checkMouth = () => {
-      if (!isPlaying || stopped) return;
-      analyser.getByteFrequencyData(dataArray);
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        sum += dataArray[i];
-      }
-      const avg = sum / dataArray.length;
-
-      if (avg < 4) {
-        onViseme("closed");
-      } else if (avg < 14) {
-        onViseme("u");
-      } else if (avg < 26) {
-        onViseme("i");
-      } else if (avg < 38) {
-        onViseme("e");
-      } else if (avg < 52) {
-        onViseme("o");
-      } else {
-        onViseme("a");
-      }
-      animId = requestAnimationFrame(checkMouth);
-    };
-
-    source.onended = () => {
-      if (!isPlaying || stopped) return;
-      isPlaying = false;
-      stopped = true;
-      cancelAnimationFrame(animId);
-      onViseme("closed");
-      onEnd();
-    };
-
-    onStart();
-    source.start(0);
-    checkMouth();
-
-    return playbackController;
-  } catch {
-    // If WebAudio decoding failed, fallback smoothly to HTMLAudioElement
-    playViaAudioElement(primaryUrl);
-    return playbackController;
-  }
+  // Try the server API first (which will try Edge TTS then fall back to Google TTS)
+  const serverUrl = `/api/ai/tts?text=${encoded}&v=edge5`;
+  playViaAudioElement(serverUrl);
+  return playbackController;
 }

@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  experimental: {
+    serverComponentsExternalPackages: ["msedge-tts"],
+  },
   typescript: {
     // Pre-existing type errors in seed-data files (n3-data.ts, n4-data.ts)
     // which are only used at seed time and never in the Next.js runtime.

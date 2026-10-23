@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
+import { CLOUD_VOICES, findBrowserVoice, isBrowserVoiceId, isGoogleTtsId, checkVoiceAvailability } from "@/lib/cloudTtsVoices";
 
 type Theme = "light" | "dark" | "system";
 type ResolvedTheme = "light" | "dark";
@@ -251,7 +252,12 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
     } catch {}
   };
 
-  // Global Speech Function — routes to cloud TTS or WebSpeech based on selected voice
+  // ──────────────────────────────────────────────────────────────────────
+  // Global Speech Function
+  // Routes to browser speechSynthesis (for "browser:" voices)
+  // or Google Translate TTS proxy (for "gtts:" voices)
+  // or auto-detect best Japanese voice (for "" / device voices)
+  // ──────────────────────────────────────────────────────────────────────
   const speak = useCallback(
     (text: string, customRate?: number, customVoiceURI?: string) => {
       if (!text || typeof window === "undefined") return;
@@ -274,12 +280,12 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
 
       const targetVoice = customVoiceURI !== undefined ? customVoiceURI : speechVoiceURI;
 
-      /** Play audio from our proxy TTS API (Edge Neural / Google / OpenAI) */
-      const playApiAudio = (voiceApiParam: string, fallbackToDefault = true) => {
+      /** Fallback: play via Google Translate TTS (server proxy or direct) */
+      const playGoogleTts = (slow = false) => {
         try {
           const encoded = encodeURIComponent(cleanText.slice(0, 300));
-          const voiceQuery = voiceApiParam ? `&voice=${encodeURIComponent(voiceApiParam)}` : "";
-          const url = `/api/ai/tts?text=${encoded}${voiceQuery}&v=edge5`;
+          const voiceQuery = slow ? "&voice=google%3Aslow" : "";
+          const url = `/api/ai/tts?text=${encoded}${voiceQuery}`;
 
           const audio = new Audio(url);
           activeAudioRef.current = audio;
@@ -287,21 +293,18 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
           audio.onended = finish;
           audio.onerror = () => {
             if (speakIdRef.current !== speakId) return;
-            if (fallbackToDefault && voiceApiParam !== "") {
-              playApiAudio("", false);
-            } else {
-              try {
-                const directAudio = new Audio(
-                  `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ja&client=tw-ob`
-                );
-                activeAudioRef.current = directAudio;
-                directAudio.playbackRate = customRate ?? speechRate;
-                directAudio.onended = finish;
-                directAudio.onerror = finish;
-                directAudio.play().catch(finish);
-              } catch {
-                finish();
-              }
+            // Last resort: direct Google TTS
+            try {
+              const directAudio = new Audio(
+                `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ja&client=tw-ob${slow ? "&ttsspeed=0.5" : ""}`
+              );
+              activeAudioRef.current = directAudio;
+              directAudio.playbackRate = customRate ?? speechRate;
+              directAudio.onended = finish;
+              directAudio.onerror = finish;
+              directAudio.play().catch(finish);
+            } catch {
+              finish();
             }
           };
           audio.play().catch(() => {
@@ -312,59 +315,110 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
         }
       };
 
-      // ── Cloud voice selected: bypass WebSpeech entirely ──
-      if (targetVoice.startsWith("cloud:")) {
-        const withoutPrefix = targetVoice.slice("cloud:".length);
-        // "google:default" → use empty param (default Google)
-        const apiParam = withoutPrefix === "google:default" ? "" : withoutPrefix;
-        playApiAudio(apiParam);
+      /** Speak using browser speechSynthesis with a specific voice */
+      const speakWithBrowserVoice = (voice: SpeechSynthesisVoice | null) => {
+        try {
+          if (!("speechSynthesis" in window)) {
+            playGoogleTts();
+            return;
+          }
+          window.speechSynthesis.cancel();
+
+          const u = new SpeechSynthesisUtterance(cleanText);
+          u.lang = "ja-JP";
+          u.rate = customRate ?? speechRate;
+          if (voice) u.voice = voice;
+
+          u.onend = finish;
+          u.onerror = (e) => {
+            if (speakIdRef.current === speakId && e.error !== "canceled" && e.error !== "interrupted") {
+              playGoogleTts();
+            } else {
+              finish();
+            }
+          };
+
+          window.speechSynthesis.speak(u);
+        } catch {
+          playGoogleTts();
+        }
+      };
+
+      // ── Google Translate TTS voice (server proxy) ──
+      if (isGoogleTtsId(targetVoice)) {
+        playGoogleTts(targetVoice === "gtts:slow");
         return;
       }
 
-      // ── Try WebSpeech with device voice ──
+      // ── Browser voice (our catalog) ──
+      if (isBrowserVoiceId(targetVoice)) {
+        const allVoices = ("speechSynthesis" in window) ? window.speechSynthesis.getVoices() : [];
+        const matched = findBrowserVoice(targetVoice, allVoices);
+        if (matched) {
+          speakWithBrowserVoice(matched);
+        } else {
+          // Voice not available on this browser, fall back to Google TTS
+          playGoogleTts();
+        }
+        return;
+      }
+
+      // ── Legacy "cloud:" voice IDs → migrate to browser or Google TTS ──
+      if (targetVoice.startsWith("cloud:")) {
+        const inner = targetVoice.slice("cloud:".length);
+        // Map legacy IDs to new browser voice patterns
+        const legacyMap: Record<string, string> = {
+          "edge:ja-JP-NanamiNeural": "browser:Nanami",
+          "edge:ja-JP-KeitaNeural": "browser:Keita",
+          "edge:ja-JP-AoiNeural": "browser:Aoi",
+          "edge:ja-JP-DaichiNeural": "browser:Daichi",
+          "edge:ja-JP-MayuNeural": "browser:Mayu",
+          "edge:ja-JP-NaokiNeural": "browser:Naoki",
+          "edge:ja-JP-ShioriNeural": "browser:Shiori",
+          "google:default": "gtts:default",
+          "google:slow": "gtts:slow",
+        };
+        const mapped = legacyMap[inner];
+        if (mapped) {
+          // Recursively call with the new ID
+          speak(text, customRate, mapped);
+          return;
+        }
+        // Unknown legacy voice → fall back to Google TTS
+        playGoogleTts();
+        return;
+      }
+
+      // ── Device voice (voiceURI) or empty (auto-detect) ──
       try {
         if ("speechSynthesis" in window) {
           window.speechSynthesis.cancel();
           const allSystemVoices = window.speechSynthesis.getVoices();
-          const hasJaVoice = allSystemVoices.some(
-            (v) =>
-              (v.lang || "").toLowerCase().startsWith("ja") ||
-              (v.lang || "").toLowerCase().includes("jp") ||
-              (v.name || "").toLowerCase().includes("japanese") ||
-              (v.name || "").includes("日本語")
-          );
 
-          if (hasJaVoice) {
-            const u = new SpeechSynthesisUtterance(cleanText);
-            u.lang = "ja-JP";
-            u.rate = customRate ?? speechRate;
+          // Try to find a voice by voiceURI or name
+          let matchedVoice: SpeechSynthesisVoice | null = null;
+          if (targetVoice) {
+            matchedVoice = allSystemVoices.find(
+              (v) => v.voiceURI === targetVoice || v.name === targetVoice
+            ) ?? null;
+          }
 
-            let matchedVoice = targetVoice
-              ? (allSystemVoices.find((v) => v.voiceURI === targetVoice || v.name === targetVoice) ?? null)
-              : null;
-            if (!matchedVoice) {
-              matchedVoice =
-                allSystemVoices.find((v) => (v.lang || "").toLowerCase().startsWith("ja")) ?? null;
-            }
-            if (matchedVoice) u.voice = matchedVoice;
+          // If no specific match, find any Japanese voice
+          if (!matchedVoice) {
+            matchedVoice = allSystemVoices.find(
+              (v) => (v.lang || "").toLowerCase().startsWith("ja")
+            ) ?? null;
+          }
 
-            u.onend = finish;
-            u.onerror = (e) => {
-              if (speakIdRef.current === speakId && e.error !== "canceled" && e.error !== "interrupted") {
-                playApiAudio("");
-              } else {
-                finish();
-              }
-            };
-
-            window.speechSynthesis.speak(u);
+          if (matchedVoice) {
+            speakWithBrowserVoice(matchedVoice);
             return;
           }
         }
       } catch {}
 
-      // ── No device Japanese voice → use cloud TTS ──
-      playApiAudio("");
+      // ── No Japanese voice on device → Google TTS ──
+      playGoogleTts();
     },
     [speechRate, speechVoiceURI, stopSpeaking]
   );
