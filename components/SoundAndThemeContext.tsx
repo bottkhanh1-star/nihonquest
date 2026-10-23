@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
+import { getVoiceDspProfile, applyVoiceDsp } from "@/lib/voiceDsp";
 
 type Theme = "light" | "dark" | "system";
 type ResolvedTheme = "light" | "dark";
@@ -69,7 +70,24 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
   const [hasJapaneseVoice, setHasJapaneseVoice] = useState<boolean>(true);
   const speakIdRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Web Audio Synthesizer helper
+  const getAudioContext = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      if (audioCtxRef.current.state === "suspended") {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+      return audioCtxRef.current;
+    }
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return null;
+    const ctx = new AudioCtx();
+    audioCtxRef.current = ctx;
+    return ctx;
+  }, []);
 
   const stopSpeaking = useCallback(() => {
     speakIdRef.current++;
@@ -78,6 +96,12 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
       try {
         window.speechSynthesis.cancel();
       } catch {}
+    }
+    if (activeSourceRef.current) {
+      try {
+        activeSourceRef.current.stop();
+      } catch {}
+      activeSourceRef.current = null;
     }
     if (activeAudioRef.current) {
       try {
@@ -251,12 +275,54 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
 
       const targetVoice = customVoiceURI !== undefined ? customVoiceURI : speechVoiceURI;
 
-      /** Play audio from our proxy TTS API (Edge Neural / Google / OpenAI) */
-      const playApiAudio = (voiceApiParam: string, fallbackToDefault = true) => {
+      /** Play audio from our proxy TTS API with Web Audio DSP modulation */
+      const playApiAudio = async (voiceApiParam: string, fallbackToDefault = true) => {
         try {
           const encoded = encodeURIComponent(cleanText.slice(0, 300));
           const voiceQuery = voiceApiParam ? `&voice=${encodeURIComponent(voiceApiParam)}` : "";
-          const url = `/api/ai/tts?text=${encoded}${voiceQuery}&v=edge3`;
+          const url = `/api/ai/tts?text=${encoded}${voiceQuery}&v=edge4`;
+
+          // 1. Try high-fidelity Web Audio API playback with persona DSP
+          const ctx = getAudioContext();
+          if (ctx) {
+            try {
+              const res = await fetch(url);
+              if (speakIdRef.current !== speakId) return;
+
+              if (res.ok) {
+                const providerHeader = res.headers.get("x-tts-provider") || "";
+                // If the backend natively synthesized Edge Neural, avoid double pitch-shifting
+                const isNeural = providerHeader.startsWith("edge:") && !providerHeader.includes("fallback");
+                const dspProfile = getVoiceDspProfile(targetVoice, isNeural);
+
+                const arrayBuf = await res.arrayBuffer();
+                if (speakIdRef.current !== speakId) return;
+
+                const audioBuffer = await ctx.decodeAudioData(arrayBuf);
+                if (speakIdRef.current !== speakId) return;
+
+                const source = ctx.createBufferSource();
+                source.buffer = audioBuffer;
+                activeSourceRef.current = source;
+
+                const combinedRate = (customRate ?? speechRate) * (dspProfile.playbackRate || 1.0);
+                applyVoiceDsp(ctx, source, { ...dspProfile, playbackRate: combinedRate });
+
+                source.onended = () => {
+                  if (speakIdRef.current === speakId) {
+                    activeSourceRef.current = null;
+                    finish();
+                  }
+                };
+                source.start(0);
+                return;
+              }
+            } catch {
+              // WebAudio decode failed, gracefully fall through to HTMLAudioElement
+            }
+          }
+
+          // 2. Fallback: Standard HTMLAudioElement
           const audio = new Audio(url);
           activeAudioRef.current = audio;
           audio.playbackRate = customRate ?? speechRate;
@@ -387,22 +453,6 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
     },
     [speechRate, speechVoiceURI, speak]
   );
-
-  // Web Audio Synthesizer (Instant Chimes)
-  const getAudioContext = useCallback(() => {
-    if (typeof window === "undefined") return null;
-    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
-      if (audioCtxRef.current.state === "suspended") {
-        audioCtxRef.current.resume().catch(() => {});
-      }
-      return audioCtxRef.current;
-    }
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return null;
-    const ctx = new AudioCtx();
-    audioCtxRef.current = ctx;
-    return ctx;
-  }, []);
 
   const playCorrect = useCallback(() => {
     if (!soundEnabled) return;

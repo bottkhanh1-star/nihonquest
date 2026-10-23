@@ -1,6 +1,7 @@
 "use client";
 
 import type { Viseme } from "./senseiLipSync";
+import { getVoiceDspProfile, applyVoiceDsp } from "./voiceDsp";
 
 /**
  * Web Audio DSP audio player for realistic Japanese Male / Female voice synthesis.
@@ -41,7 +42,7 @@ export async function playSenseiAudio(
 
   const voiceToUse = voiceParam || (gender === "male" ? "edge:ja-JP-KeitaNeural" : "edge:ja-JP-NanamiNeural");
   const encoded = encodeURIComponent(text.slice(0, 300));
-  const primaryUrl = `/api/ai/tts?text=${encoded}&voice=${encodeURIComponent(voiceToUse)}&v=edge3`;
+  const primaryUrl = `/api/ai/tts?text=${encoded}&voice=${encodeURIComponent(voiceToUse)}&v=edge4`;
   const directMirrorUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ja&client=tw-ob`;
 
   let stopped = false;
@@ -147,9 +148,12 @@ export async function playSenseiAudio(
 
   // Try fetching audio array buffer for WebAudio DSP
   let arrayBuffer: ArrayBuffer | null = null;
+  let isAuthenticNeural = false;
   try {
     const res = await fetch(primaryUrl);
     if (res.ok) {
+      const pHeader = res.headers.get("x-tts-provider") || "";
+      isAuthenticNeural = pHeader.startsWith("edge:") && !pHeader.includes("fallback");
       arrayBuffer = await res.arrayBuffer();
     }
   } catch {}
@@ -182,33 +186,10 @@ export async function playSenseiAudio(
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 256;
 
-    let lastNode: AudioNode = source;
+    // Apply persona DSP (pitch shift, formant EQ)
+    const dspProfile = getVoiceDspProfile(voiceToUse, isAuthenticNeural);
+    applyVoiceDsp(ctx, source, dspProfile, analyser);
 
-    if (gender === "male") {
-      const isAuthenticMale = voiceToUse.includes("Keita") || voiceToUse.includes("Daichi") || voiceToUse.includes("Naoki") || voiceToUse.includes("onyx") || voiceToUse.includes("echo");
-      // Only pitch shift if using a generic voice without natural male timbre
-      source.playbackRate.value = isAuthenticMale ? 1.0 : 0.82;
-
-      // Low-shelf boost for masculine chest warmth
-      const lowShelf = ctx.createBiquadFilter();
-      lowShelf.type = "lowshelf";
-      lowShelf.frequency.value = 220;
-      lowShelf.gain.value = 5.0;
-
-      // Peak filter cut to soften feminine high-frequency harmonic peaks
-      const midCut = ctx.createBiquadFilter();
-      midCut.type = "peaking";
-      midCut.frequency.value = 2800;
-      midCut.gain.value = -4.5;
-
-      source.connect(lowShelf);
-      lowShelf.connect(midCut);
-      lastNode = midCut;
-    } else {
-      source.playbackRate.value = 1.0;
-    }
-
-    lastNode.connect(analyser);
     analyser.connect(ctx.destination);
 
     let isPlaying = true;
