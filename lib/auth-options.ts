@@ -18,15 +18,17 @@ if (process.env.NEXTAUTH_URL) {
   process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL.replace(/\/+$/, "");
 }
 
-// Tự động nhận diện URL trên Netlify hoặc Vercel nếu người dùng chưa set NEXTAUTH_URL
-if (!process.env.NEXTAUTH_URL) {
-  if (process.env.URL) {
-    process.env.NEXTAUTH_URL = process.env.URL.replace(/\/+$/, "");
-  } else if (process.env.DEPLOY_PRIME_URL) {
-    process.env.NEXTAUTH_URL = process.env.DEPLOY_PRIME_URL.replace(/\/+$/, "");
-  } else if (process.env.VERCEL_URL) {
-    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL.replace(/\/+$/, "")}`;
-  }
+// Tự động nhận diện URL trên Netlify hoặc Vercel
+// Nếu đang deploy mà NEXTAUTH_URL bị set nhầm thành localhost hoặc chưa set:
+const detectedCloudUrl =
+  process.env.URL ||
+  process.env.DEPLOY_PRIME_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+
+if (detectedCloudUrl && (!process.env.NEXTAUTH_URL || process.env.NEXTAUTH_URL.includes("localhost"))) {
+  process.env.NEXTAUTH_URL = detectedCloudUrl.replace(/\/+$/, "");
+} else if (process.env.NEXTAUTH_URL) {
+  process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL.replace(/\/+$/, "");
 }
 
 const loginSchema = z.object({

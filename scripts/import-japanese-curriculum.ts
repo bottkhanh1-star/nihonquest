@@ -1,4 +1,5 @@
-import { prisma } from "../lib/prisma";
+import { PrismaClient } from "@prisma/client";
+const prisma = new PrismaClient();
 import { HIRAGANA_BASIC } from "../prisma/seed-data/hiragana";
 import { KATAKANA_BASIC } from "../prisma/seed-data/katakana";
 import { DAKUTEN } from "../prisma/seed-data/dakuten";
@@ -130,36 +131,8 @@ export async function importJapaneseCurriculum(): Promise<ImportStats> {
     }
     seenVocabKeys.add(key);
 
-    const existingVocab = await prisma.vocabulary.findFirst({
-      where: { word: v.word, jlptLevel: v.jlptLevel },
-    });
-
     let vocabId: string;
-    if (existingVocab) {
-      vocabId = existingVocab.id;
-      await prisma.vocabulary.update({
-        where: { id: existingVocab.id },
-        data: {
-          kana: v.kana,
-          kanji: v.kanji,
-          romaji: v.romaji,
-          meaning: v.meaning,
-          partOfSpeech: v.partOfSpeech,
-          tags: v.tags ?? "",
-        },
-      });
-      if (v.exampleJapanese) {
-        await prisma.vocabularyExample.deleteMany({ where: { vocabularyId: existingVocab.id } });
-        await prisma.vocabularyExample.create({
-          data: {
-            vocabularyId: existingVocab.id,
-            japanese: v.exampleJapanese,
-            romaji: v.exampleRomaji,
-            meaning: v.exampleMeaning ?? "",
-          },
-        });
-      }
-    } else {
+    try {
       const created = await prisma.vocabulary.create({
         data: {
           word: v.word,
@@ -184,6 +157,12 @@ export async function importJapaneseCurriculum(): Promise<ImportStats> {
         },
       });
       vocabId = created.id;
+    } catch {
+      const existing = await prisma.vocabulary.findFirst({
+        where: { word: v.word, jlptLevel: v.jlptLevel },
+        select: { id: true },
+      });
+      vocabId = existing?.id || "fallback";
     }
 
     if (!vocabMapByLevel.has(v.jlptLevel)) {

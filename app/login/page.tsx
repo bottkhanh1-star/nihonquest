@@ -40,8 +40,8 @@ function AuthErrorNotice() {
   let message = t("loginErrInvalid") || "Email hoặc mật khẩu không đúng. Vui lòng thử lại.";
   if (code === "OAuthSignin") {
     message = "Đăng nhập Google thất bại (Chưa thiết lập GOOGLE_CLIENT_ID / NEXTAUTH_URL hoặc bị từ chối).";
-  } else if (code === "OAuthCallback") {
-    message = "Lỗi phản hồi từ Google OAuth. Vui lòng thử lại.";
+  } else if (code === "OAuthCallback" || code === "Callback") {
+    message = "Không thể xác thực tài khoản. Cơ sở dữ liệu (Neon Database) đã vượt quá quota lưu trữ/tính toán (Mã lỗi 53000) hoặc bị ngắt kết nối. Vui lòng kiểm tra Neon Console hoặc cập nhật DATABASE_URL trong .env.";
   }
 
   return (

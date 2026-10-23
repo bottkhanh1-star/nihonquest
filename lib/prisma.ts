@@ -8,13 +8,22 @@ function createPrismaClient(): PrismaClient {
     return new PrismaClient();
   }
 
-  // Use Neon serverless adapter for Neon PostgreSQL databases (supports Cloudflare Workers)
-  if (connectionString.includes("neon.tech")) {
-    const pool = new Pool({ connectionString });
-    const adapter = new PrismaNeon(pool);
-    return new PrismaClient({ adapter });
+  // Use Neon serverless WebSocket adapter only in Edge runtime (where native TCP sockets are not available)
+  if (process.env.NEXT_RUNTIME === "edge" && connectionString.includes("neon.tech")) {
+    try {
+      const pool = new Pool({ connectionString });
+      pool.on("error", (err) => {
+        console.warn("[Neon Database Pool Notice]:", (err as Error)?.message || err);
+      });
+      const adapter = new PrismaNeon(pool);
+      return new PrismaClient({ adapter });
+    } catch (e) {
+      console.warn("[Prisma Neon Adapter Fallback]:", e);
+      return new PrismaClient();
+    }
   }
 
+  // In Node.js (Next.js server & CLI scripts), native Prisma Rust Engine connects via robust TCP (zero WebSocket dropouts)
   return new PrismaClient();
 }
 
