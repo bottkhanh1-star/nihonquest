@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
       history: clientHistory,
       nativeLanguage: clientLang,
       userProgress: clientProgress,
+      screenContext,
     } = body as {
       message?: string;
       conversationId?: string;
@@ -67,6 +68,36 @@ export async function POST(req: NextRequest) {
       scenarioId?: string;
       history?: { role: "user" | "assistant"; content: string }[];
       nativeLanguage?: NativeLanguage;
+      screenContext?: {
+        pageType?: string;
+        pageTitle?: string;
+        item?: {
+          term: string;
+          reading?: string;
+          meaning?: string;
+          type?: string;
+          examples?: Array<{ ja: string; vi?: string }>;
+          isFlipped?: boolean;
+          extraPrompt?: string;
+        } | null;
+        quiz?: {
+          question: string;
+          options?: string[];
+          userAnswer?: string;
+          correctAnswer?: string;
+          isCorrect?: boolean;
+          explanation?: string;
+        } | null;
+        recentMistakes?: Array<{
+          term: string;
+          reading?: string;
+          meaning?: string;
+          wrongAnswer?: string;
+          correctAnswer?: string;
+          type?: string;
+        }>;
+        userMemories?: string[];
+      };
       userProgress?: {
         userLevel?: string;
         level?: number;
@@ -290,7 +321,60 @@ ${studentNameText}- Trình độ JLPT hiện tại: ${progressLevel} (Cấp đ�
               ? `Bạn là nhân viên nhà hàng / hướng dẫn viên du lịch Nhật Bản. Hãy đối thoại nhã nhặn, tự nhiên trong 2-3 câu ngắn kèm dịch nghĩa bằng ${nativeLangName}.`
               : `Bạn là AI Sensei (Aoi Sensei 🌸 / Ren Sensei 🦊) tại Nihon Quest - gia sư tiếng Nhật siêu ngắn gọn, súc tích và đúng trọng tâm.`;
 
-      const systemPrompt = `${baseInstruction}${progressSnippet}${mistakesSnippet}
+      
+      // Construct Screen-Aware Context Snippet
+      let screenSnippet = "";
+      if (screenContext) {
+        const parts: string[] = [];
+        if (screenContext.pageTitle || screenContext.pageType) {
+          parts.push(`- Màn hình hiện tại: ${screenContext.pageTitle || screenContext.pageType} (Mục: ${screenContext.pageType || 'học tập'})`);
+        }
+        if (screenContext.item?.term) {
+          parts.push(`- Nội dung/Thẻ đang hiển thị ngay trước mắt:
+  • Từ/Mục: "${screenContext.item.term}" ${screenContext.item.reading ? `(${screenContext.item.reading})` : ''}
+  • Loại kiến thức: ${screenContext.item.type || 'Từ vựng/Kanji'}
+  • Ý nghĩa: ${screenContext.item.meaning || 'Chưa mở'}
+  • Trạng thái: ${screenContext.item.isFlipped ? 'Đã lật xem đáp án' : 'Đang trong lúc suy nghĩ (chưa lật thẻ)'}
+  ${screenContext.item.examples && screenContext.item.examples.length > 0 ? `• Câu ví dụ: ${screenContext.item.examples.map(e => `${e.ja} (${e.vi || ''})`).join(' | ')}` : ''}
+  ${screenContext.item.extraPrompt ? `• Ghi chú: ${screenContext.item.extraPrompt}` : ''}`);
+        }
+        if (screenContext.quiz?.question) {
+          parts.push(`- Câu hỏi bài tập trắc nghiệm đang giải:
+  • Câu hỏi: "${screenContext.quiz.question}"
+  ${screenContext.quiz.options ? `• Các lựa chọn: ${screenContext.quiz.options.join(' / ')}` : ''}
+  ${screenContext.quiz.userAnswer ? `• Học viên chọn: "${screenContext.quiz.userAnswer}"` : ''}
+  ${screenContext.quiz.correctAnswer ? `• Đáp án đúng: "${screenContext.quiz.correctAnswer}"` : ''}
+  ${screenContext.quiz.isCorrect !== undefined ? `• Kết quả: ${screenContext.quiz.isCorrect ? 'ĐÚNG ✓' : 'SAI ✗'}` : ''}
+  ${screenContext.quiz.explanation ? `• Giải thích: ${screenContext.quiz.explanation}` : ''}`);
+        }
+        if (parts.length > 0) {
+          screenSnippet = `\nNGỮ CẢNH MÀN HÌNH THỜI GIAN THỰC (REAL-TIME SCREEN CONTEXT):
+${parts.join('\n')}
+=> ĐẶC BIỆT LƯU Ý: Nếu học viên hỏi "đây là từ gì?", "câu này nghĩa là gì?", "sao câu này em chọn sai?", "giảng lại kiến thức này", "cho mẹo nhớ", bạn PHẢI TRẢ LỜI TRỰC TIẾP VỀ NỘI DUNG MÀN HÌNH Ở TRÊN MÀ KHÔNG HỎI LẠI!\n`;
+        }
+      }
+
+      // Construct Session Recent Mistakes Snippet
+      let sessionMistakesSnippet = "";
+      if (screenContext?.recentMistakes && screenContext.recentMistakes.length > 0) {
+        const list = screenContext.recentMistakes.slice(0, 5).map((m, idx) =>
+          `  ${idx + 1}. "${m.term}" ${m.reading ? `(${m.reading})` : ''}: ${m.wrongAnswer || 'chưa nhớ'}`
+        ).join('\n');
+        sessionMistakesSnippet = `\nCÁC LỖI SAI VỪA MẮC PHẢI TRONG PHIÊN NÀY (VỪA XẢY RA):
+${list}
+=> Khi học viên hỏi "tôi vừa sai cái gì?", hãy phân tích ngay các mục này!\n`;
+      }
+
+      // Construct Long-term User Memory Snippet
+      let memorySnippet = "";
+      if (screenContext?.userMemories && screenContext.userMemories.length > 0) {
+        const memList = screenContext.userMemories.map(m => `  • ${m}`).join('\n');
+        memorySnippet = `\nKÝ ỨC DÀI HẠN & THÔNG TIN HỌC VIÊN ĐÃ CHIA SẺ TRƯỚC ĐÂY:
+${memList}
+=> Hãy ứng dụng các thông tin trên (tên xưng hô, sở thích, mục tiêu JLPT) để cá nhân hoá câu trả lời!\n`;
+      }
+
+      const systemPrompt = `${baseInstruction}${screenSnippet}${progressSnippet}${mistakesSnippet}${sessionMistakesSnippet}${memorySnippet}
 CRITICAL PEDAGOGICAL & LANGUAGE DIRECTIVE:
 1. STRICT CONCISENESS & COMPLETENESS (NGẮN GỌN, ĐẦY ĐỦ, ĐÚNG TRỌNG TÂM):
    - Phản hồi ĐẦY ĐỦ Ý nhưng NGẮN GỌN, súc tích (khoảng 3 đến 5 gạch đầu dòng ngắn).

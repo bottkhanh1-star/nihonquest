@@ -329,108 +329,116 @@ export function AppNav({
               </button>
 
               {speedOpen && (
-                <div className="absolute right-0 top-12 z-50 w-[min(19rem,calc(100vw-1.5rem))] space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-sumi-900">
-                  {speakingText && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        stopSpeaking();
-                      }}
-                      className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-white px-3 py-2 text-xs font-black shadow-sm animate-pulse hover:bg-red-700 transition"
-                      title="Dừng âm thanh đang phát ngay lập tức"
-                    >
-                      <span>⏹️</span>
-                      <span>Dừng âm thanh đang phát</span>
-                    </button>
-                  )}
-                  <div>
-                    <p className="mb-2 text-xs font-bold text-slate-500">Tốc độ đọc</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {SPEECH_RATES.map((rate) => (
+                <>
+                  {/* Backdrop for mobile to prevent touch bleeding and auto-close on click outside */}
+                  <div
+                    className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs sm:hidden animate-in fade-in duration-100"
+                    onClick={() => setSpeedOpen(false)}
+                    aria-hidden="true"
+                  />
+                  <div className="fixed left-3 right-3 top-16 z-50 max-w-sm mx-auto sm:max-w-none sm:mx-0 sm:fixed-none sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:w-80 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-sumi-700 dark:bg-sumi-900 animate-in zoom-in-95 duration-100 box-border">
+                    {speakingText && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          stopSpeaking();
+                        }}
+                        className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-white px-3 py-2 text-xs font-black shadow-sm animate-pulse hover:bg-red-700 transition"
+                        title="Dừng âm thanh đang phát ngay lập tức"
+                      >
+                        <span>⏹️</span>
+                        <span>Dừng âm thanh đang phát</span>
+                      </button>
+                    )}
+                    <div>
+                      <p className="mb-2 text-xs font-bold text-slate-600 dark:text-slate-300">Tốc độ đọc</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {SPEECH_RATES.map((rate) => (
+                          <button
+                            key={rate}
+                            type="button"
+                            onClick={() => {
+                              setSpeechRate(rate);
+                              speak("こんにちは", rate);
+                            }}
+                            aria-pressed={speechRate === rate}
+                            className={`min-h-11 rounded-full border px-4 text-sm font-extrabold transition ${
+                              speechRate === rate
+                                ? "border-red-600 bg-red-600 text-white"
+                                : "border-slate-200 text-slate-600 hover:border-red-300 hover:text-red-600 dark:border-sumi-700 dark:text-slate-200"
+                            }`}
+                          >
+                            {rate}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Giọng đọc tiếng Nhật</span>
                         <button
-                          key={rate}
                           type="button"
                           onClick={() => {
-                            setSpeechRate(rate);
-                            speak("こんにちは", rate);
+                            setSpeedOpen(false);
+                            setVoiceModalOpen(true);
                           }}
-                          aria-pressed={speechRate === rate}
-                          className={`min-h-11 rounded-full border px-4 text-sm font-extrabold transition ${
-                            speechRate === rate
-                              ? "border-red-600 bg-red-600 text-white"
-                              : "border-slate-200 text-slate-600 hover:border-red-300 hover:text-red-600 dark:border-slate-700 dark:text-slate-300"
-                          }`}
+                          className="text-[11px] font-extrabold text-red-600 dark:text-red-400 hover:text-red-700 flex items-center gap-1"
                         >
-                          {rate}x
+                          <span>Tất cả giọng</span>
+                          <span>›</span>
                         </button>
-                      ))}
-                    </div>
-                  </div>
+                      </div>
 
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-bold text-slate-500">Giọng đọc tiếng Nhật</span>
                       <button
                         type="button"
                         onClick={() => {
                           setSpeedOpen(false);
                           setVoiceModalOpen(true);
                         }}
-                        className="text-[11px] font-extrabold text-red-600 hover:text-red-700 flex items-center gap-1"
+                        className="w-full min-h-11 p-2.5 rounded-xl border border-slate-200 dark:border-sumi-700 bg-slate-50 dark:bg-sumi-950 flex items-center justify-between gap-2 text-left hover:border-red-400 transition"
                       >
-                        <span>Tất cả giọng</span>
-                        <span>›</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
+                            {(() => {
+                              if (!speechVoiceURI) return "Tự động (tiếng Nhật)";
+                              if (isCloudVoiceId(speechVoiceURI)) {
+                                const found = CLOUD_VOICES.find((c) => c.id === speechVoiceURI);
+                                return found ? `${found.displayName} · ${found.gender === "female" ? "♀ Nữ" : "♂ Nam"}` : speechVoiceURI;
+                              }
+                              const dev = availableVoices.find((v) => v.voiceURI === speechVoiceURI);
+                              return dev ? dev.name : speechVoiceURI;
+                            })()}
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-300 truncate">
+                            {isCloudVoiceId(speechVoiceURI) ? "☁️ Giọng Cloud Neural (Đồng bộ mọi trang)" : "💻 Giọng cài trên máy"}
+                          </div>
+                        </div>
+                        <span className="text-xs text-slate-500 dark:text-slate-300 shrink-0">⚙️ Đổi</span>
                       </button>
                     </div>
 
                     <button
                       type="button"
+                      role="switch"
+                      aria-checked={soundEnabled}
                       onClick={() => {
-                        setSpeedOpen(false);
-                        setVoiceModalOpen(true);
+                        setSoundEnabled(!soundEnabled);
+                        if (!soundEnabled) setTimeout(playClick, 30);
                       }}
-                      className="w-full min-h-11 p-2.5 rounded-xl border border-slate-200 dark:border-sumi-700 bg-slate-50 dark:bg-sumi-950 flex items-center justify-between gap-2 text-left hover:border-red-400 transition"
+                      className="flex min-h-11 w-full items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-left text-sm font-bold text-slate-700 dark:bg-sumi-950 dark:text-slate-200"
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="font-bold text-xs text-slate-800 dark:text-slate-200 truncate">
-                          {(() => {
-                            if (!speechVoiceURI) return "Tự động (tiếng Nhật)";
-                            if (isCloudVoiceId(speechVoiceURI)) {
-                              const found = CLOUD_VOICES.find((c) => c.id === speechVoiceURI);
-                              return found ? `${found.displayName} · ${found.gender === "female" ? "♀ Nữ" : "♂ Nam"}` : speechVoiceURI;
-                            }
-                            const dev = availableVoices.find((v) => v.voiceURI === speechVoiceURI);
-                            return dev ? dev.name : speechVoiceURI;
-                          })()}
-                        </div>
-                        <div className="text-[10px] text-slate-400 truncate">
-                          {isCloudVoiceId(speechVoiceURI) ? "☁️ Giọng Cloud Neural (Đồng bộ mọi trang)" : "💻 Giọng cài trên máy"}
-                        </div>
-                      </div>
-                      <span className="text-xs text-slate-400 shrink-0">⚙️ Đổi</span>
+                      <span>{t("soundFx") || "Âm thanh hiệu ứng"}</span>
+                      <span
+                        className={`relative h-6 w-11 shrink-0 rounded-full transition ${soundEnabled ? "bg-red-600" : "bg-slate-300 dark:bg-slate-700"}`}
+                      >
+                        <span
+                          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${soundEnabled ? "left-5" : "left-0.5"}`}
+                        />
+                      </span>
                     </button>
                   </div>
-
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={soundEnabled}
-                    onClick={() => {
-                      setSoundEnabled(!soundEnabled);
-                      if (!soundEnabled) setTimeout(playClick, 30);
-                    }}
-                    className="flex min-h-11 w-full items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-left text-sm font-bold text-slate-700 dark:bg-sumi-950 dark:text-slate-200"
-                  >
-                    <span>{t("soundFx") || "Âm thanh hiệu ứng"}</span>
-                    <span
-                      className={`relative h-6 w-11 shrink-0 rounded-full transition ${soundEnabled ? "bg-red-600" : "bg-slate-300 dark:bg-slate-700"}`}
-                    >
-                      <span
-                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${soundEnabled ? "left-5" : "left-0.5"}`}
-                      />
-                    </span>
-                  </button>
-                </div>
+                </>
               )}
             </div>
 

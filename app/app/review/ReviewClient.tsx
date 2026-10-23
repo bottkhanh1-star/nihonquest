@@ -12,6 +12,7 @@ import { updateSrs } from "@/lib/srs";
 import { useNativeLanguage } from "@/components/LanguageContext";
 import { LocalizedVocabMeaning, prefetchVocabTranslations, findVocabEnglishMeaning } from "@/lib/vocabLocalization";
 import { LocalizedGrammarText } from "@/lib/grammarLocalization";
+import { useAiScreenContext } from "@/components/ai-sensei/AiScreenContext";
 
 type Grade = "AGAIN" | "HARD" | "GOOD" | "EASY";
 
@@ -229,6 +230,26 @@ export function ReviewClient({ initial, backgrounds = [] }: { initial: EnrichedR
   const [submitting, setSubmitting] = useState(false);
   const [sessionTotal] = useState(initial.length);
   const [done, setDone] = useState(0);
+  const { setScreenItem, recordSessionMistake } = useAiScreenContext();
+  const currentItem = items[currentIndex];
+
+  // Sync current review item into global AI Sensei context for instant screen-awareness
+  useEffect(() => {
+    if (currentItem) {
+      setScreenItem(
+        {
+          term: currentItem.title,
+          reading: currentItem.reading,
+          meaning: currentItem.extra || currentItem.subtitle,
+          type: currentItem.contentType as any,
+          isFlipped,
+        },
+        `Ôn tập SRS · ${currentItem.title}`
+      );
+    } else {
+      setScreenItem(null);
+    }
+  }, [currentItem, isFlipped, setScreenItem]);
 
   // Batch prefetch translations for all cards in the queue whenever items or language change
   useEffect(() => {
@@ -240,8 +261,6 @@ export function ReviewClient({ initial, backgrounds = [] }: { initial: EnrichedR
     }));
     prefetchVocabTranslations(toPrefetch, nativeLanguage);
   }, [items, nativeLanguage]);
-
-  const currentItem = items[currentIndex];
 
   const handleGrade = useCallback(
     async (grade: Grade) => {
@@ -265,6 +284,17 @@ export function ReviewClient({ initial, backgrounds = [] }: { initial: EnrichedR
         if (grade === "AGAIN") playIncorrect();
         else playCorrect();
         setIsFlipped(false);
+
+        // Record weak memory / mistake to AI Sensei context
+        if (grade === "AGAIN" || grade === "HARD") {
+          recordSessionMistake({
+            term: currentItem.title,
+            reading: currentItem.reading,
+            meaning: currentItem.extra || currentItem.subtitle,
+            type: currentItem.contentType,
+            wrongAnswer: grade === "AGAIN" ? "Quên (Bấm Again)" : "Khó nhớ (Bấm Hard)",
+          });
+        }
 
         if (grade === "AGAIN") {
           // Move the card to the back of the session queue.

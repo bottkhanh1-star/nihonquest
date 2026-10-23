@@ -10,6 +10,7 @@ import { useNativeLanguage, SUPPORTED_LANGUAGES, type NativeLanguage } from "@/c
 import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 import { BASE64_IMAGES } from "@/lib/assets/base64Images";
 import { FormattedSenseiMessage } from "./markdownHelper";
+import { useAiScreenContext } from "./AiScreenContext";
 
 interface ChatMessage {
   id: string;
@@ -126,6 +127,9 @@ export function KawaiiSenseiBubble() {
   const { progress } = useUserProgress();
   const { nativeLanguage, setNativeLanguage, langInfo, t } = useNativeLanguage();
   const { playClick, speak, stopSpeaking, speakingText, showToast, hasJapaneseVoice } = useSoundAndTheme();
+  const { currentScreen, addMemory, removeMemory } = useAiScreenContext();
+  const [activeTab, setActiveTab] = useState<"chat" | "memory">("chat");
+  const [manualMemoryInput, setManualMemoryInput] = useState("");
 
   const [isOpen, setIsOpen] = useState(false);
   const [character, setCharacter] = useState<"aoi" | "ren">("aoi");
@@ -502,6 +506,24 @@ const messagesEndRef = useRef<HTMLDivElement | null>(null);
     setHasInteracted(true);
     if (isListening) stopListening();
 
+    // Heuristic detection: extract user shared facts into Sensei long-term memory
+    if (/(?:tôi tên là|mình tên là|gọi tôi là|tên tôi là)\s+([^.,!?]+)/i.test(text)) {
+      const match = text.match(/(?:tôi tên là|mình tên là|gọi tôi là|tên tôi là)\s+([^.,!?]+)/i);
+      if (match?.[1]) addMemory(`Tên gọi: ${match[1].trim()}`);
+    } else if (/(?:mục tiêu của tôi|mình muốn thi|mục tiêu là|muốn đỗ)\s+([^.,!?]+)/i.test(text)) {
+      const match = text.match(/(?:mục tiêu của tôi|mình muốn thi|mục tiêu là|muốn đỗ)\s+([^.,!?]+)/i);
+      if (match?.[1]) addMemory(`Mục tiêu học: ${match[1].trim()}`);
+    } else if (/(?:tôi thích|mình rất thích|sở thích của mình|sở thích là)\s+([^.,!?]+)/i.test(text)) {
+      const match = text.match(/(?:tôi thích|mình rất thích|sở thích của mình|sở thích là)\s+([^.,!?]+)/i);
+      if (match?.[1]) addMemory(`Sở thích: ${match[1].trim()}`);
+    } else if (/(?:tôi hay quên|mình hay nhầm|tôi yếu phần|khó nhớ)\s+([^.,!?]+)/i.test(text)) {
+      const match = text.match(/(?:tôi hay quên|mình hay nhầm|tôi yếu phần|khó nhớ)\s+([^.,!?]+)/i);
+      if (match?.[1]) addMemory(`Điểm yếu cần củng cố: ${match[1].trim()}`);
+    } else if (/(?:nhớ là|hãy nhớ|ghi nhớ giúp em)\s+(.+)/i.test(text)) {
+      const match = text.match(/(?:nhớ là|hãy nhớ|ghi nhớ giúp em)\s+(.+)/i);
+      if (match?.[1]) addMemory(match[1].trim());
+    }
+
     const userMsg: ChatMessage = {
       id: "u-" + Date.now(),
       role: "user",
@@ -520,6 +542,7 @@ const messagesEndRef = useRef<HTMLDivElement | null>(null);
           message: text,
           scenarioId: "assistant_guide",
           nativeLanguage,
+          screenContext: currentScreen,
           history: messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
           userProgress: progress
             ? {
@@ -577,9 +600,25 @@ const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const handleQuickAction = (actionKey: string) => {
     let prompt = "";
-    if (actionKey === "recommend") {
+    if (actionKey === "screen_explain") {
+      if (currentScreen.item) {
+        prompt = `Sensei ơi, hãy giải thích thật chi tiết và dễ hiểu về mục đang hiển thị trên màn hình: "${currentScreen.item.term}" ${currentScreen.item.reading ? `(${currentScreen.item.reading})` : ''} - Ý nghĩa: ${currentScreen.item.meaning || ''}. Hãy cho em 2 ví dụ thực tế và cách dùng nhé!`;
+      } else if (currentScreen.quiz) {
+        prompt = `Sensei ơi, hãy giảng giải lại câu hỏi trắc nghiệm trên màn hình này: "${currentScreen.quiz.question}" và phân tích tại sao đáp án đúng là "${currentScreen.quiz.correctAnswer || 'chính xác'}" nhé!`;
+      } else {
+        prompt = "Sensei ơi, hãy giảng giải kiến thức trên trang này cho em với!";
+      }
+    } else if (actionKey === "screen_mnemonic") {
+      prompt = `Sensei ơi, cho em mẹo nhớ nhanh (Mnemonic hoặc câu chuyện liên tưởng) của từ/chữ "${currentScreen.item?.term || 'trên màn hình'}" với!`;
+    } else if (actionKey === "screen_quiz_wrong") {
+      prompt = `Sensei ơi, trong câu hỏi "${currentScreen.quiz?.question || 'này'}", tại sao em chọn "${currentScreen.quiz?.userAnswer || ''}" lại chưa đúng? Hãy phân tích lỗi sai và bẫy hay gặp giúp em với!`;
+    } else if (actionKey === "recommend") {
       prompt = t("todayStudyTip");
     } else if (actionKey === "mistakes") {
+      if (currentScreen.recentMistakes.length > 0) {
+        const mistakeNames = currentScreen.recentMistakes.map(m => m.term).join(", ");
+        prompt = `Sensei ơi, em vừa làm sai/chưa nhớ các câu này trong lúc học: ${mistakeNames}. Hãy phân tích điểm yếu và hướng dẫn em cách khắc phục với!`;
+      } else {
       prompt =
         nativeLanguage === "en"
           ? "Sensei, what are my recent mistakes and weak points? Please help me fix them!"
@@ -590,6 +629,7 @@ const messagesEndRef = useRef<HTMLDivElement | null>(null);
           : nativeLanguage === "ko"
           ? "Sensei, 최근 제가 틀린 문제와 취약점은 무엇인가요? 분석하고 교정해 주세요!"
           : "Sensei ơi, em gần đây hay làm sai những chỗ nào? Hãy phân tích lỗi sai và hướng dẫn em cách khắc phục với!";
+      }
     } else if (actionKey === "srs") {
       prompt = t("checkSrsCards");
     } else if (actionKey === "grammar") {
@@ -804,6 +844,24 @@ const messagesEndRef = useRef<HTMLDivElement | null>(null);
                 {speakingText ? "⏹️" : autoSpeak ? "🔊" : "🔇"}
               </button>
 
+              {/* Memory Bank Tab Switcher */}
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setActiveTab(activeTab === "chat" ? "memory" : "chat");
+                }}
+                title={activeTab === "chat" ? "Xem trí nhớ của Sensei về bạn" : "Quay lại màn hình trò chuyện"}
+                className={`px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 transition ${
+                  activeTab === "memory"
+                    ? "bg-white text-red-600 shadow-sm"
+                    : "bg-white/20 hover:bg-white/30 text-white"
+                }`}
+              >
+                <span>🧠</span>
+                <span className="text-[11px] font-black">{currentScreen.userMemories.length}</span>
+              </button>
+
               {/* Native Language Picker Dropdown */}
               <div className="relative">
                 <button
@@ -880,8 +938,82 @@ const messagesEndRef = useRef<HTMLDivElement | null>(null);
             </div>
           </div>
 
+          {/* Real-time Screen Context Alert Bar */}
+          {activeTab === "chat" && currentScreen.item && (
+            <div className="bg-rose-50 dark:bg-sumi-950 px-3 py-1.5 border-b border-rose-200/80 dark:border-rose-900/50 flex items-center justify-between text-xs animate-in fade-in">
+              <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                <span className="shrink-0 text-red-600 dark:text-red-400 font-black text-[11px]">📍 Đang xem:</span>
+                <span className="font-extrabold text-slate-900 dark:text-slate-100 truncate">
+                  {currentScreen.item.term} {currentScreen.item.reading ? `(${currentScreen.item.reading})` : ""}
+                </span>
+                {currentScreen.item.meaning && (
+                  <span className="text-slate-600 dark:text-slate-300 text-[11px] truncate">
+                    · {currentScreen.item.meaning}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => handleQuickAction("screen_explain")}
+                className="shrink-0 px-2 py-0.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-[10px] font-black shadow-xs transition active:scale-95 flex items-center gap-1"
+              >
+                <span>💡</span>
+                <span>Giảng giải</span>
+              </button>
+            </div>
+          )}
+
+          {activeTab === "chat" && !currentScreen.item && currentScreen.quiz && (
+            <div className="bg-amber-50 dark:bg-sumi-950 px-3 py-1.5 border-b border-amber-200/80 dark:border-amber-900/50 flex items-center justify-between text-xs animate-in fade-in">
+              <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                <span className="shrink-0 text-amber-600 dark:text-amber-400 font-black text-[11px]">🎯 Bài tập:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                  {currentScreen.quiz.question}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleQuickAction(currentScreen.quiz?.isCorrect === false ? "screen_quiz_wrong" : "screen_explain")}
+                className="shrink-0 px-2 py-0.5 rounded-full bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black shadow-xs transition active:scale-95 flex items-center gap-1"
+              >
+                <span>{currentScreen.quiz?.isCorrect === false ? "❓ Sao sai?" : "💡 Giảng câu này"}</span>
+              </button>
+            </div>
+          )}
+
           {/* Quick Guidance Toolbar */}
+          {activeTab === "chat" && (
           <div className="bg-slate-50 dark:bg-sumi-950 px-3 py-2 border-b border-slate-200/80 dark:border-slate-800 flex items-center gap-1.5 overflow-x-auto text-xs no-scrollbar">
+            {currentScreen.item && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleQuickAction("screen_explain")}
+                  className="shrink-0 px-2.5 py-1 rounded-full bg-red-600 text-white hover:bg-red-700 font-bold transition active:scale-95 flex items-center gap-1 shadow-xs"
+                >
+                  <span>💡</span>
+                  <span>Giảng từ này</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickAction("screen_mnemonic")}
+                  className="shrink-0 px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 hover:bg-rose-200 font-bold transition active:scale-95 flex items-center gap-1"
+                >
+                  <span>🧠</span>
+                  <span>Mẹo nhớ</span>
+                </button>
+              </>
+            )}
+            {currentScreen.recentMistakes.length > 0 && (
+              <button
+                type="button"
+                onClick={() => handleQuickAction("mistakes")}
+                className="shrink-0 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-200 font-bold transition active:scale-95 flex items-center gap-1"
+              >
+                <span>⚠️</span>
+                <span>Lỗi vừa sai ({currentScreen.recentMistakes.length})</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleQuickAction("recommend")}
@@ -889,14 +1021,6 @@ const messagesEndRef = useRef<HTMLDivElement | null>(null);
             >
               <span>🧭</span>
               <span>{t("studyPlanQuick")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickAction("mistakes")}
-              className="shrink-0 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-200 font-bold transition active:scale-95 flex items-center gap-1"
-            >
-              <span>🔍</span>
-              <span>{t("fixMistakes")}</span>
             </button>
             <button
               type="button"
@@ -912,15 +1036,11 @@ const messagesEndRef = useRef<HTMLDivElement | null>(null);
             >
               💡 {t("grammarQuick")}
             </button>
-            <button
-              type="button"
-              onClick={() => handleQuickAction("conversation")}
-              className="shrink-0 px-2.5 py-1 rounded-full bg-white dark:bg-sumi-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-red-400 font-semibold transition active:scale-95"
-            >
-              🗣️ {t("voiceChatQuick")}
-            </button>
           </div>
+          )}
 
+          {activeTab === "chat" ? (
+          <>
           {/* Messages Container */}
           <div className="flex-1 p-3.5 overflow-y-auto space-y-3.5 text-sm">
             {messages.map((m) => {
@@ -1031,6 +1151,97 @@ const messagesEndRef = useRef<HTMLDivElement | null>(null);
               >
                 {t("senseiStopMic")}
               </button>
+            </div>
+          )}
+
+          </>
+          ) : (
+            /* ================= MEMORY BANK VIEW ================= */
+            <div className="flex-1 p-4 overflow-y-auto space-y-4 text-sm bg-slate-50 dark:bg-sumi-950">
+              <div className="bg-white dark:bg-sumi-900 p-3.5 rounded-2xl border border-slate-200 dark:border-sumi-700 shadow-sm">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-xl">🧠</span>
+                  <h4 className="font-black text-sm text-slate-900 dark:text-white">
+                    Trí nhớ của Sensei về bạn
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Sensei tự động ghi nhớ sở thích, mục tiêu thi cử, và những điểm yếu bạn đã chia sẻ để bài giảng và ví dụ luôn phù hợp nhất với bạn.
+                </p>
+              </div>
+
+              {/* Add Memory Form */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={manualMemoryInput}
+                  onChange={(e) => setManualMemoryInput(e.target.value)}
+                  placeholder="Thêm điều bạn muốn Sensei nhớ (VD: Mình thích anime Naruto)..."
+                  className="flex-1 bg-white dark:bg-sumi-900 border border-slate-200 dark:border-sumi-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-400 outline-none focus:border-red-500"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && manualMemoryInput.trim()) {
+                      e.preventDefault();
+                      addMemory(manualMemoryInput.trim());
+                      setManualMemoryInput("");
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (manualMemoryInput.trim()) {
+                      addMemory(manualMemoryInput.trim());
+                      setManualMemoryInput("");
+                    }
+                  }}
+                  className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shrink-0 transition"
+                >
+                  + Nhớ
+                </button>
+              </div>
+
+              {/* Memory List */}
+              <div className="space-y-2">
+                {currentScreen.userMemories.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-slate-400">
+                    <p className="text-2xl mb-2">🌸</p>
+                    <p>Chưa có ký ức nào được lưu.</p>
+                    <p className="mt-1">Hãy trò chuyện hoặc gõ vào ô trên để Sensei ghi nhớ nhé!</p>
+                  </div>
+                ) : (
+                  currentScreen.userMemories.map((mem, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-white dark:bg-sumi-900 rounded-2xl border border-slate-200 dark:border-sumi-700 flex items-start justify-between gap-2 shadow-xs"
+                    >
+                      <div className="flex items-start gap-2 min-w-0">
+                        <span className="text-xs text-red-500 mt-0.5 font-bold">•</span>
+                        <span className="text-xs text-slate-800 dark:text-slate-200 leading-snug break-words">
+                          {mem}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeMemory(idx)}
+                        className="text-slate-400 hover:text-red-500 text-xs p-1 shrink-0 transition"
+                        title="Xoá thông tin này"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("chat")}
+                  className="w-full py-2.5 rounded-xl bg-slate-200 dark:bg-sumi-800 hover:bg-slate-300 dark:hover:bg-sumi-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition"
+                >
+                  ← Quay lại màn hình trò chuyện
+                </button>
+              </div>
             </div>
           )}
 

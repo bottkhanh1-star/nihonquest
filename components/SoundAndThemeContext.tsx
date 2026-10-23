@@ -280,6 +280,26 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
 
       const targetVoice = customVoiceURI !== undefined ? customVoiceURI : speechVoiceURI;
 
+      /** Play via Microsoft Edge Neural TTS server endpoint (Universal HD quality) */
+      const playEdgeNeuralTts = (voiceKey: string) => {
+        try {
+          const encoded = encodeURIComponent(cleanText.slice(0, 300));
+          const url = `/api/ai/tts?text=${encoded}&voice=edge:${encodeURIComponent(voiceKey)}`;
+          const audio = new Audio(url);
+          activeAudioRef.current = audio;
+          audio.playbackRate = customRate ?? speechRate;
+          audio.onended = finish;
+          audio.onerror = () => {
+            if (speakIdRef.current === speakId) playGoogleTts();
+          };
+          audio.play().catch(() => {
+            if (speakIdRef.current === speakId) playGoogleTts();
+          });
+        } catch {
+          playGoogleTts();
+        }
+      };
+
       /** Fallback: play via Google Translate TTS (server proxy or direct) */
       const playGoogleTts = (slow = false) => {
         try {
@@ -350,41 +370,32 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
         return;
       }
 
-      // ── Browser voice (our catalog) ──
+      // ── Cloud / Browser catalog voice ──
       if (isBrowserVoiceId(targetVoice)) {
         const allVoices = ("speechSynthesis" in window) ? window.speechSynthesis.getVoices() : [];
         const matched = findBrowserVoice(targetVoice, allVoices);
         if (matched) {
           speakWithBrowserVoice(matched);
-        } else {
-          // Voice not available on this browser, fall back to Google TTS
-          playGoogleTts();
+          return;
         }
+        // If not installed locally on this phone/browser, seamlessly synthesize via server Edge Neural!
+        const catalogVoice = CLOUD_VOICES.find((v) => v.id === targetVoice);
+        if (catalogVoice?.edgeVoiceKey) {
+          playEdgeNeuralTts(catalogVoice.edgeVoiceKey);
+          return;
+        }
+        playGoogleTts();
         return;
       }
 
-      // ── Legacy "cloud:" voice IDs → migrate to browser or Google TTS ──
+      // ── Cloud Edge Neural IDs (e.g. cloud:edge:Nanami) ──
       if (targetVoice.startsWith("cloud:")) {
         const inner = targetVoice.slice("cloud:".length);
-        // Map legacy IDs to new browser voice patterns
-        const legacyMap: Record<string, string> = {
-          "edge:ja-JP-NanamiNeural": "browser:Nanami",
-          "edge:ja-JP-KeitaNeural": "browser:Keita",
-          "edge:ja-JP-AoiNeural": "browser:Aoi",
-          "edge:ja-JP-DaichiNeural": "browser:Daichi",
-          "edge:ja-JP-MayuNeural": "browser:Mayu",
-          "edge:ja-JP-NaokiNeural": "browser:Naoki",
-          "edge:ja-JP-ShioriNeural": "browser:Shiori",
-          "google:default": "gtts:default",
-          "google:slow": "gtts:slow",
-        };
-        const mapped = legacyMap[inner];
-        if (mapped) {
-          // Recursively call with the new ID
-          speak(text, customRate, mapped);
+        if (inner.startsWith("edge:")) {
+          const key = inner.slice(5);
+          playEdgeNeuralTts(key);
           return;
         }
-        // Unknown legacy voice → fall back to Google TTS
         playGoogleTts();
         return;
       }

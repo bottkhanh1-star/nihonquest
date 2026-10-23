@@ -9,6 +9,7 @@ import { notifyProgressUpdated } from "@/components/UserProgressContext";
 import { useNativeLanguage } from "@/components/LanguageContext";
 import { getLocalizedLessonTitle } from "@/lib/lessonLocalization";
 import { LocalizedQuizText } from "@/lib/quizLocalization";
+import { useAiScreenContext } from "@/components/ai-sensei/AiScreenContext";
 import { SpeakButton } from "./LessonSections";
 import { IconArrowRight, IconCheck, IconClose, IconRefresh } from "./LessonIcons";
 
@@ -163,6 +164,7 @@ export function QuizRunner({
   const router = useRouter();
   const { playClick, playCorrect, playIncorrect, playFanfare, showToast, speak } = useSoundAndTheme();
   const { t, nativeLanguage } = useNativeLanguage();
+  const { setScreenQuiz, setScreenItem, recordSessionMistake } = useAiScreenContext();
 
   // Hàng đợi câu hỏi (chỉ số vào lesson.exercises). "Hỏi khác" đẩy câu hiện tại xuống cuối hàng.
   const [queue, setQueue] = useState<number[]>(() => lesson.exercises.map((_, i) => i));
@@ -181,6 +183,27 @@ export function QuizRunner({
   const totalQuestions = lesson.exercises.length;
   const currentExercise: Exercise | undefined = lesson.exercises[queue[0]];
   const currentNumber = attemptTotal - queue.length + 1;
+
+  useEffect(() => {
+    if (currentExercise) {
+      setScreenQuiz({
+        question: currentExercise.question,
+        options: currentExercise.options?.map((o) => o.text),
+        userAnswer: selectedAnswer || undefined,
+        correctAnswer: hasChecked ? currentExercise.correctAnswer : undefined,
+        isCorrect: hasChecked ? normalize(selectedAnswer) === normalize(currentExercise.correctAnswer) : undefined,
+        explanation: currentExercise.prompt || undefined,
+      });
+      setScreenItem(
+        {
+          term: currentExercise.question,
+          type: (currentExercise.contentType as any) || "EXERCISE",
+          extraPrompt: currentExercise.prompt || undefined,
+        },
+        `Bài học: ${lesson.title}`
+      );
+    }
+  }, [currentExercise, selectedAnswer, hasChecked, lesson.title, setScreenQuiz, setScreenItem]);
 
   const displayedOptions = useMemo(() => {
     if (!currentExercise?.options || currentExercise.options.length === 0) return [];
@@ -225,6 +248,14 @@ export function QuizRunner({
     }
 
     setHasChecked(true);
+    if (!isCorrect && currentExercise) {
+      recordSessionMistake({
+        term: currentExercise.question,
+        wrongAnswer: selectedAnswer,
+        correctAnswer: currentExercise.correctAnswer,
+        type: "EXERCISE",
+      });
+    }
     // Giữ đúng một bản ghi cho mỗi câu: nếu không, lượt làm lại sẽ gửi trùng
     // exerciseId và API từ chối với "Incomplete submission".
     setAnswersLog((prev) => [

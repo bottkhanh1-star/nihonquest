@@ -78,11 +78,9 @@ export const authOptions: NextAuthOptions = {
             clientId: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
             allowDangerousEmailAccountLinking: true,
-            checks: ["state"],
             authorization: {
               params: {
-                access_type: "offline",
-                prompt: "consent",
+                prompt: "select_account",
               },
             },
           }),
@@ -90,6 +88,24 @@ export const authOptions: NextAuthOptions = {
       : []),
   ],
   callbacks: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider === "google" && user?.id) {
+        try {
+          await prisma.profile.upsert({
+            where: { userId: user.id },
+            create: {
+              userId: user.id,
+              displayName: user.name || (profile as { name?: string })?.name || "Học viên",
+              avatar: user.image || (profile as { picture?: string })?.picture || null,
+            },
+            update: {},
+          }).catch(() => {});
+        } catch {
+          // Không để lỗi profile ngăn cản đăng nhập
+        }
+      }
+      return true;
+    },
     async redirect({ url, baseUrl }) {
       // 1. Cho phép các đường dẫn tương đối (vd: "/app", "/onboarding"), chặn protocol-relative "//evil.com"
       if (url.startsWith("/") && !url.startsWith("//")) {
@@ -169,21 +185,10 @@ export const authOptions: NextAuthOptions = {
         secure: isSecureCookieEnv,
       },
     },
-    state: {
-      name: isSecureCookieEnv ? "__Secure-next-auth.state" : "next-auth.state",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: isSecureCookieEnv,
-        maxAge: 60 * 15,
-      },
-    },
   },
   logger: {
-    error(code) {
-      // Tránh log toàn bộ metadata nhạy cảm ra stdout
-      console.error("[NextAuth Error]", code);
+    error(code, metadata) {
+      console.error("[NextAuth Error]", code, metadata);
     },
     warn(code) {
       console.warn("[NextAuth Warning]", code);

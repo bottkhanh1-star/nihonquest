@@ -8,6 +8,8 @@ import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 import { useNativeLanguage } from "@/components/LanguageContext";
 import { LocalizedVocabMeaning } from "@/lib/vocabLocalization";
 import { LocalizedGrammarText } from "@/lib/grammarLocalization";
+import { useAiScreenContext } from "@/components/ai-sensei/AiScreenContext";
+import { useEffect } from "react";
 
 interface GrammarExample {
   id: string;
@@ -147,6 +149,7 @@ function GrammarDetail({ item }: { item: GrammarItem }) {
 /* ------------------------------------------------------------------ */
 export function GrammarClient({ grammar, defaultLevel = "N5", displayName = "bạn", levelImages }: GrammarClientProps) {
   const { t } = useNativeLanguage();
+  const { setScreenItem } = useAiScreenContext();
   const initialLevel = (LEVELS as string[]).includes(defaultLevel) ? defaultLevel : "N5";
   const [search, setSearch] = useState("");
   const [levelFilter, setLevelFilter] = useState<string>(initialLevel);
@@ -208,6 +211,23 @@ export function GrammarClient({ grammar, defaultLevel = "N5", displayName = "b�
 
   // Nếu bài đang chọn bị lọc mất thì coi như chưa chọn
   const selected = filtered.find((g) => g.id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (selected) {
+      setScreenItem(
+        {
+          term: selected.title,
+          meaning: selected.meaning,
+          type: "GRAMMAR",
+          examples: selected.examples?.map((ex) => ({ ja: ex.japanese, vi: ex.meaning })),
+          extraPrompt: selected.structure ? `Cấu trúc: ${selected.structure}. Lỗi thường gặp: ${selected.commonMistakes || 'Không có'}` : undefined,
+        },
+        `Ngữ pháp ${selected.level} · ${selected.title}`
+      );
+    } else {
+      setScreenItem(null);
+    }
+  }, [selected, setScreenItem]);
   const exampleCount = levelFiltered.reduce((acc, g) => acc + g.examples.length, 0);
   const activeLevel = (LEVELS as string[]).includes(levelFilter) ? (levelFilter as Level) : null;
 

@@ -161,7 +161,7 @@ export function VoiceSelectorModal({
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
+          <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 line-clamp-1">
             {v.description}
           </p>
         </div>
@@ -206,12 +206,12 @@ export function VoiceSelectorModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="voice-modal-title"
-      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-150 box-border"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl max-h-[88vh] flex flex-col rounded-3xl bg-white dark:bg-sumi-900 shadow-2xl border border-slate-200 dark:border-sumi-700 overflow-hidden animate-in zoom-in-95 duration-150"
+        className="relative w-full max-w-xl max-h-[90vh] my-auto flex flex-col rounded-3xl bg-white dark:bg-sumi-900 shadow-2xl border border-slate-200 dark:border-sumi-700 overflow-hidden animate-in zoom-in-95 duration-150 box-border"
       >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-sumi-800 flex items-center justify-between shrink-0 bg-gradient-to-r from-red-500/10 via-rose-500/5 to-transparent">
@@ -220,14 +220,14 @@ export function VoiceSelectorModal({
               <span>🎙️</span>
               <span>Cài đặt giọng đọc tiếng Nhật</span>
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Dùng giọng đọc sẵn có trên trình duyệt của bạn · Đồng bộ trên toàn site
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+              Giọng AI Neural tự nhiên &amp; giọng thiết bị · Hoạt động trên mọi thiết bị
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-sumi-800 transition"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-sumi-800 transition"
             aria-label="Đóng"
           >
             ✕
