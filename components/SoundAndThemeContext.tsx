@@ -1,7 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
-import { getVoiceDspProfile, applyVoiceDsp } from "@/lib/voiceDsp";
 
 type Theme = "light" | "dark" | "system";
 type ResolvedTheme = "light" | "dark";
@@ -275,54 +274,13 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
 
       const targetVoice = customVoiceURI !== undefined ? customVoiceURI : speechVoiceURI;
 
-      /** Play audio from our proxy TTS API with Web Audio DSP modulation */
-      const playApiAudio = async (voiceApiParam: string, fallbackToDefault = true) => {
+      /** Play audio from our proxy TTS API (Edge Neural / Google / OpenAI) */
+      const playApiAudio = (voiceApiParam: string, fallbackToDefault = true) => {
         try {
           const encoded = encodeURIComponent(cleanText.slice(0, 300));
           const voiceQuery = voiceApiParam ? `&voice=${encodeURIComponent(voiceApiParam)}` : "";
-          const url = `/api/ai/tts?text=${encoded}${voiceQuery}&v=edge4`;
+          const url = `/api/ai/tts?text=${encoded}${voiceQuery}&v=edge5`;
 
-          // 1. Try high-fidelity Web Audio API playback with persona DSP
-          const ctx = getAudioContext();
-          if (ctx) {
-            try {
-              const res = await fetch(url);
-              if (speakIdRef.current !== speakId) return;
-
-              if (res.ok) {
-                const providerHeader = res.headers.get("x-tts-provider") || "";
-                // If the backend natively synthesized Edge Neural, avoid double pitch-shifting
-                const isNeural = providerHeader.startsWith("edge:") && !providerHeader.includes("fallback");
-                const dspProfile = getVoiceDspProfile(targetVoice, isNeural);
-
-                const arrayBuf = await res.arrayBuffer();
-                if (speakIdRef.current !== speakId) return;
-
-                const audioBuffer = await ctx.decodeAudioData(arrayBuf);
-                if (speakIdRef.current !== speakId) return;
-
-                const source = ctx.createBufferSource();
-                source.buffer = audioBuffer;
-                activeSourceRef.current = source;
-
-                const combinedRate = (customRate ?? speechRate) * (dspProfile.playbackRate || 1.0);
-                applyVoiceDsp(ctx, source, { ...dspProfile, playbackRate: combinedRate });
-
-                source.onended = () => {
-                  if (speakIdRef.current === speakId) {
-                    activeSourceRef.current = null;
-                    finish();
-                  }
-                };
-                source.start(0);
-                return;
-              }
-            } catch {
-              // WebAudio decode failed, gracefully fall through to HTMLAudioElement
-            }
-          }
-
-          // 2. Fallback: Standard HTMLAudioElement
           const audio = new Audio(url);
           activeAudioRef.current = audio;
           audio.playbackRate = customRate ?? speechRate;

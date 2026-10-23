@@ -10,63 +10,57 @@ export const runtime = "nodejs";
 // Package: msedge-tts (https://github.com/Migushthe2nd/MsEdgeTTS)
 // ──────────────────────────────────────────────────────────────────────────
 
-// Cache of warm MsEdgeTTS instances by voiceName to prevent repeated WebSocket handshakes & 429 rate limiting
-const edgeInstanceMap = new Map<string, any>();
-
-async function getWarmEdgeInstance(voiceName: string) {
-  let inst = edgeInstanceMap.get(voiceName);
-  if (!inst) {
-    const nodeRequire =
-      typeof (globalThis as unknown as { __non_webpack_require__?: (id: string) => any }).__non_webpack_require__ !== "undefined"
-        ? (globalThis as unknown as { __non_webpack_require__: (id: string) => any }).__non_webpack_require__
-        : eval("require");
-    const { MsEdgeTTS, OUTPUT_FORMAT } = nodeRequire("msedge-tts");
-    inst = new MsEdgeTTS();
-    await inst.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
-    edgeInstanceMap.set(voiceName, inst);
-  }
-  return inst;
-}
-
 async function synthesizeEdgeTts(
   text: string,
   voiceName: string,
   options?: { pitch?: string; rate?: string; volume?: string }
 ): Promise<Buffer | null> {
-  // Try with warm instance, retry once with fresh instance if connection dropped
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const tts = await getWarmEdgeInstance(voiceName);
-      const { audioStream } = tts.toStream(text, options);
+  let tts: any = null;
+  try {
+    const nodeRequire =
+      typeof (globalThis as unknown as { __non_webpack_require__?: (id: string) => any }).__non_webpack_require__ !== "undefined"
+        ? (globalThis as unknown as { __non_webpack_require__: (id: string) => any }).__non_webpack_require__
+        : eval("require");
+    const { MsEdgeTTS, OUTPUT_FORMAT } = nodeRequire("msedge-tts");
+    tts = new MsEdgeTTS();
+    await tts.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
 
-      const chunks: Buffer[] = [];
-      await new Promise<void>((resolve, reject) => {
-        let done = false;
-        const finish = () => {
-          if (!done) {
-            done = true;
-            resolve();
-          }
-        };
-        audioStream.on("data", (chunk: Buffer) => chunks.push(chunk));
-        audioStream.once("end", finish);
-        audioStream.once("close", finish);
-        audioStream.once("error", (err: any) => {
-          if (!done) {
-            done = true;
-            reject(err);
-          }
-        });
+    const { audioStream } = tts.toStream(text, options);
+
+    const chunks: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+      let done = false;
+      const finish = () => {
+        if (!done) {
+          done = true;
+          resolve();
+        }
+      };
+      audioStream.on("data", (chunk: Buffer) => chunks.push(chunk));
+      audioStream.once("end", finish);
+      audioStream.once("close", finish);
+      audioStream.once("error", (err: any) => {
+        if (!done) {
+          done = true;
+          reject(err);
+        }
       });
+    });
 
-      if (chunks.length > 0) return Buffer.concat(chunks);
-    } catch (err) {
-      console.warn(`[Edge TTS] attempt ${attempt + 1} failed:`, (err as Error)?.message?.slice(0, 100));
-      edgeInstanceMap.delete(voiceName);
-      if (attempt === 1) return null;
+    if (chunks.length > 0) return Buffer.concat(chunks);
+    return null;
+  } catch (err) {
+    console.warn("[Edge TTS] synthesis error:", (err as Error)?.message?.slice(0, 100));
+    return null;
+  } finally {
+    // Explicitly terminate the WebSocket session so serverless containers
+    // and Microsoft endpoints release the connection immediately without 429 leaks.
+    if (tts && tts._ws) {
+      try {
+        tts._closeSocket(tts._ws);
+      } catch {}
     }
   }
-  return null;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -148,33 +142,33 @@ export async function GET(req: NextRequest) {
     let voiceName = "ja-JP-NanamiNeural";
     let options: { pitch?: string; rate?: string } | undefined;
 
-    // Map presets to Edge Neural base voice + prosody (pitch & rate)
+    // Map presets to Edge Neural base voice + natural prosody (pitch & rate)
     if (voiceKey.includes("Keita") || voiceKey === "keita") {
       voiceName = "ja-JP-KeitaNeural";
     } else if (voiceKey.includes("Daichi") || voiceKey === "daichi") {
       voiceName = "ja-JP-KeitaNeural";
-      options = { pitch: "+15Hz", rate: "+5%" };
+      options = { pitch: "+12Hz", rate: "+4%" };
     } else if (voiceKey.includes("Naoki") || voiceKey === "naoki") {
       voiceName = "ja-JP-KeitaNeural";
-      options = { pitch: "-15Hz", rate: "-5%" };
+      options = { pitch: "-10Hz", rate: "-3%" };
     } else if (voiceKey.includes("Kenji") || voiceKey === "kenji") {
       voiceName = "ja-JP-KeitaNeural";
-      options = { pitch: "-28Hz", rate: "-10%" };
+      options = { pitch: "-20Hz", rate: "-6%" };
     } else if (voiceKey.includes("Ren") || voiceKey === "ren") {
       voiceName = "ja-JP-KeitaNeural";
-      options = { pitch: "+8Hz", rate: "+14%" };
+      options = { pitch: "+5Hz", rate: "+8%" };
     } else if (voiceKey.includes("Aoi") || voiceKey === "aoi") {
       voiceName = "ja-JP-NanamiNeural";
-      options = { pitch: "+20Hz", rate: "+6%" };
+      options = { pitch: "+15Hz", rate: "+4%" };
     } else if (voiceKey.includes("Sakura") || voiceKey === "sakura") {
       voiceName = "ja-JP-NanamiNeural";
-      options = { pitch: "+35Hz", rate: "+12%" };
+      options = { pitch: "+24Hz", rate: "+6%" };
     } else if (voiceKey.includes("Mayu") || voiceKey === "mayu") {
       voiceName = "ja-JP-NanamiNeural";
-      options = { pitch: "-10Hz", rate: "-4%" };
+      options = { pitch: "-8Hz", rate: "-3%" };
     } else if (voiceKey.includes("Shiori") || voiceKey === "shiori") {
       voiceName = "ja-JP-NanamiNeural";
-      options = { pitch: "-15Hz", rate: "-8%" };
+      options = { pitch: "-12Hz", rate: "-5%" };
     } else {
       voiceName = "ja-JP-NanamiNeural";
     }

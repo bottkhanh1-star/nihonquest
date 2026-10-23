@@ -42,7 +42,7 @@ export async function playSenseiAudio(
 
   const voiceToUse = voiceParam || (gender === "male" ? "edge:ja-JP-KeitaNeural" : "edge:ja-JP-NanamiNeural");
   const encoded = encodeURIComponent(text.slice(0, 300));
-  const primaryUrl = `/api/ai/tts?text=${encoded}&voice=${encodeURIComponent(voiceToUse)}&v=edge4`;
+  const primaryUrl = `/api/ai/tts?text=${encoded}&voice=${encodeURIComponent(voiceToUse)}&v=edge5`;
   const directMirrorUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ja&client=tw-ob`;
 
   let stopped = false;
@@ -186,8 +186,8 @@ export async function playSenseiAudio(
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 256;
 
-    // Apply persona DSP (pitch shift, formant EQ)
-    const dspProfile = getVoiceDspProfile(voiceToUse, isAuthenticNeural);
+    // Apply persona speed settings
+    const dspProfile = getVoiceDspProfile(voiceToUse);
     applyVoiceDsp(ctx, source, dspProfile, analyser);
 
     analyser.connect(ctx.destination);
