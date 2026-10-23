@@ -8,6 +8,7 @@ import {
   getLocalizedJouyouInfo,
 } from "@/lib/kanjiLocalization";
 import { Icon, Modal } from "@/components/ui";
+import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 
 const GRADES: Array<{
   value: string;
@@ -42,6 +43,7 @@ interface JouyouKanjiViewProps {
 
 export function JouyouKanjiView({ savedItemIds = [], onToggleSave }: JouyouKanjiViewProps) {
   const { nativeLanguage } = useNativeLanguage();
+  const { speak, stopSpeaking, speakingText } = useSoundAndTheme();
   const [selectedGrade, setSelectedGrade] = useState<string>("ALL");
   const [selectedJlpt, setSelectedJlpt] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -50,18 +52,14 @@ export function JouyouKanjiView({ savedItemIds = [], onToggleSave }: JouyouKanji
   const [viewMode, setViewMode] = useState<"GRID" | "LIST">("GRID");
   const [activeItem, setActiveItem] = useState<JouyouKanjiItem | null>(null);
 
-  // Play audio pronunciation
+  // Play audio pronunciation with multi-tier fallback & immediate toggle
   const speakReading = (reading: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const clean = reading.replace(/[・\.\-\s]/g, "");
-      const utterance = new SpeechSynthesisUtterance(clean);
-      utterance.lang = "ja-JP";
-      utterance.rate = 0.9;
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      // fallback
+    const clean = reading.replace(/[・\.\-\s]/g, "");
+    if (!clean) return;
+    if (speakingText === clean) {
+      stopSpeaking();
+    } else {
+      speak(clean);
     }
   };
 

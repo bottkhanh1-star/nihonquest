@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { NihonQuestLogo } from "./NihonQuestLogo";
+import { VoiceSelectorModal } from "./VoiceSelectorModal";
+import { CLOUD_VOICES, isCloudVoiceId } from "@/lib/cloudTtsVoices";
 import { SPEECH_RATES, useSoundAndTheme } from "./SoundAndThemeContext";
 import { useUserProgress } from "./UserProgressContext";
 import { useNativeLanguage, SUPPORTED_LANGUAGES } from "./LanguageContext";
@@ -149,11 +151,21 @@ export function AppNav({
     setSpeechVoiceURI,
     availableVoices,
     speak,
+    stopSpeaking,
+    speakingText,
     showToast,
   } = useSoundAndTheme();
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [speedOpen, setSpeedOpen] = useState(false);
+  const [voiceModalOpen, setVoiceModalOpen] = useState(false);
+  const [previewSpeakingURI, setPreviewSpeakingURI] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!speakingText) {
+      setPreviewSpeakingURI(null);
+    }
+  }, [speakingText]);
   const [accountOpen, setAccountOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -318,6 +330,19 @@ export function AppNav({
 
               {speedOpen && (
                 <div className="absolute right-0 top-12 z-50 w-[min(19rem,calc(100vw-1.5rem))] space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-sumi-900">
+                  {speakingText && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stopSpeaking();
+                      }}
+                      className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-white px-3 py-2 text-xs font-black shadow-sm animate-pulse hover:bg-red-700 transition"
+                      title="Dừng âm thanh đang phát ngay lập tức"
+                    >
+                      <span>⏹️</span>
+                      <span>Dừng âm thanh đang phát</span>
+                    </button>
+                  )}
                   <div>
                     <p className="mb-2 text-xs font-bold text-slate-500">Tốc độ đọc</p>
                     <div className="flex flex-wrap gap-1.5">
@@ -342,23 +367,49 @@ export function AppNav({
                     </div>
                   </div>
 
-                  {availableVoices.length > 0 && (
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-bold text-slate-500">Giọng đọc</span>
-                      <select
-                        value={speechVoiceURI}
-                        onChange={(e) => setSpeechVoiceURI(e.target.value)}
-                        className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-base font-semibold text-slate-700 outline-none focus:border-red-400 dark:border-slate-700 dark:bg-sumi-950 dark:text-slate-200"
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-slate-500">Giọng đọc tiếng Nhật</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSpeedOpen(false);
+                          setVoiceModalOpen(true);
+                        }}
+                        className="text-[11px] font-extrabold text-red-600 hover:text-red-700 flex items-center gap-1"
                       >
-                        <option value="">Tự động (tiếng Nhật)</option>
-                        {availableVoices.map((voice) => (
-                          <option key={voice.voiceURI} value={voice.voiceURI}>
-                            {voice.name} ({voice.lang}) · {voiceGenderLabel(guessVoiceGender(voice.name))}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
+                        <span>Tất cả giọng</span>
+                        <span>›</span>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSpeedOpen(false);
+                        setVoiceModalOpen(true);
+                      }}
+                      className="w-full min-h-11 p-2.5 rounded-xl border border-slate-200 dark:border-sumi-700 bg-slate-50 dark:bg-sumi-950 flex items-center justify-between gap-2 text-left hover:border-red-400 transition"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-xs text-slate-800 dark:text-slate-200 truncate">
+                          {(() => {
+                            if (!speechVoiceURI) return "Tự động (tiếng Nhật)";
+                            if (isCloudVoiceId(speechVoiceURI)) {
+                              const found = CLOUD_VOICES.find((c) => c.id === speechVoiceURI);
+                              return found ? `${found.displayName} · ${found.gender === "female" ? "♀ Nữ" : "♂ Nam"}` : speechVoiceURI;
+                            }
+                            const dev = availableVoices.find((v) => v.voiceURI === speechVoiceURI);
+                            return dev ? dev.name : speechVoiceURI;
+                          })()}
+                        </div>
+                        <div className="text-[10px] text-slate-400 truncate">
+                          {isCloudVoiceId(speechVoiceURI) ? "☁️ Giọng Cloud Neural (Đồng bộ mọi trang)" : "💻 Giọng cài trên máy"}
+                        </div>
+                      </div>
+                      <span className="text-xs text-slate-400 shrink-0">⚙️ Đổi</span>
+                    </button>
+                  </div>
 
                   <button
                     type="button"
@@ -726,6 +777,30 @@ export function AppNav({
           </div>
         </div>
       )}
+
+      {/* Global Voice Selector Modal (Integrated with Portal) */}
+      <VoiceSelectorModal
+        isOpen={voiceModalOpen}
+        onClose={() => setVoiceModalOpen(false)}
+        currentVoiceURI={speechVoiceURI}
+        onSelectVoice={(uri) => {
+          setSpeechVoiceURI(uri);
+        }}
+        availableDeviceVoices={availableVoices}
+        onPreviewSpeak={(uri) => {
+          if (speakingText && previewSpeakingURI === uri) {
+            stopSpeaking();
+            setPreviewSpeakingURI(null);
+          } else {
+            setPreviewSpeakingURI(uri);
+            const foundCloud = CLOUD_VOICES.find((v) => v.id === uri);
+            const previewText = foundCloud?.previewText || "こんにちは！日本語の学習を一緒に頑張りましょう。";
+            speak(previewText, undefined, uri);
+          }
+        }}
+        isSpeaking={Boolean(speakingText)}
+        speakingURI={previewSpeakingURI}
+      />
     </>
   );
 }

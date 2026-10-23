@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { YokaiGameResult } from "@/lib/yokai-dash/types";
 import { Button } from "@/components/ui";
 import { useNativeLanguage } from "@/components/LanguageContext";
+import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 import { localizeYokaiQuestion } from "@/lib/yokai-dash/yokaiLocalization";
 
 interface YokaiResultModalProps {
@@ -29,20 +30,19 @@ export function YokaiResultModal({
 }: YokaiResultModalProps) {
   const [activeTab, setActiveTab] = useState<"summary" | "review">("summary");
   const { nativeLanguage, t } = useNativeLanguage();
+  const { speak, stopSpeaking, speakingText } = useSoundAndTheme();
 
   const isEn = nativeLanguage === "en";
   const isZh = nativeLanguage === "zh-CN" || nativeLanguage === "zh-TW";
   const isKo = nativeLanguage === "ko";
 
   const speakText = (text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "ja-JP";
-      utterance.rate = 0.85;
-      window.speechSynthesis.speak(utterance);
-    } catch {}
+    if (!text) return;
+    if (speakingText === text) {
+      stopSpeaking();
+    } else {
+      speak(text, 0.85);
+    }
   };
 
   const missedCount = result.answeredQuestions.filter((q) => !q.isCorrect).length;

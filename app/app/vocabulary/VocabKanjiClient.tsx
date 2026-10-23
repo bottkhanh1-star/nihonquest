@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Badge, Button, Card, EmptyState, Icon, IconButton, Modal, SelectField } from "@/components/ui";
 import { RubyWord } from "@/components/JapaneseTerm";
@@ -367,8 +367,8 @@ function PlayButton({ text, speakingText, onSpeak }: { text: string; speakingTex
   return (
     <button
       type="button"
-      aria-label="Nghe phát âm"
-      title="Nghe phát âm"
+      aria-label={playing ? "Dừng phát âm" : "Nghe phát âm"}
+      title={playing ? "Dừng phát âm" : "Nghe phát âm"}
       onClick={(e) => {
         e.stopPropagation();
         onSpeak(text);
@@ -379,7 +379,11 @@ function PlayButton({ text, speakingText, onSpeak }: { text: string; speakingTex
           : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400"
       }`}
     >
-      <Icon name="play" className="ml-0.5 h-4 w-4" />
+      {playing ? (
+        <span className="text-xs">⏹️</span>
+      ) : (
+        <Icon name="play" className="ml-0.5 h-4 w-4" />
+      )}
       {playing && <span className="absolute inset-0 animate-ping rounded-full border border-red-400/70" />}
     </button>
   );
@@ -1444,7 +1448,15 @@ export function VocabKanjiClient({
 
   const isDesktop = useIsDesktop();
   const { nativeLanguage, t } = useNativeLanguage();
-  const { playClick, playCorrect, showToast, speak, speakingText } = useSoundAndTheme();
+  const { playClick, playCorrect, showToast, speak, stopSpeaking, speakingText } = useSoundAndTheme();
+
+  const handleToggleSpeak = useCallback((t: string) => {
+    if (speakingText === t) {
+      stopSpeaking();
+    } else {
+      speak(t);
+    }
+  }, [speakingText, speak, stopSpeaking]);
   const userRank = LEVEL_ORDER[defaultLevel] ?? 0;
 
   const canonicalVocabMap = useMemo(() => {
@@ -1763,7 +1775,7 @@ export function VocabKanjiClient({
       speakingText={speakingText}
       showAllExamples={showAllExamples}
       onToggleExamples={() => setShowAllExamples((s) => !s)}
-      onSpeak={speak}
+      onSpeak={handleToggleSpeak}
       onSave={() => handleAddToSrs("VOCAB", activeVocab.id, canonicalVocabMap.get(activeVocab.id)?.writtenForm || activeVocab.word)}
       t={t}
     />
@@ -1773,7 +1785,7 @@ export function VocabKanjiClient({
       saved={savedSet.has(activeKanji.id)}
       starred={starredSet.has(activeKanji.id)}
       speakingText={speakingText}
-      onSpeak={speak}
+      onSpeak={handleToggleSpeak}
       onSave={() => handleAddToSrs("KANJI", activeKanji.id, activeKanji.character)}
       onToggleStar={() => toggleStar(activeKanji.id)}
       t={t}
@@ -2196,7 +2208,7 @@ export function VocabKanjiClient({
                               speakingText={speakingText}
                               onSelect={() => selectItem(v.id)}
                               onToggleStar={() => toggleStar(v.id)}
-                              onSpeak={speak}
+                              onSpeak={handleToggleSpeak}
                               onSave={() => handleAddToSrs("VOCAB", v.id, canon.writtenForm)}
                               t={t}
                             />
@@ -2213,7 +2225,7 @@ export function VocabKanjiClient({
                             speakingText={speakingText}
                             onSelect={() => selectItem(k.id)}
                             onToggleStar={() => toggleStar(k.id)}
-                            onSpeak={speak}
+                            onSpeak={handleToggleSpeak}
                             onSave={() => handleAddToSrs("KANJI", k.id, k.character)}
                             t={t}
                           />
@@ -2267,7 +2279,7 @@ export function VocabKanjiClient({
                     mastered={masteredSet.has(c.id)}
                     showRomaji={showRomaji}
                     speakingText={speakingText}
-                    onSpeak={speak}
+                    onSpeak={handleToggleSpeak}
                     onSave={() => handleAddToSrs(c.type, c.id, c.front)}
                     onToggleMastered={() => toggleMastered(c.id)}
                     t={t}
@@ -2335,7 +2347,7 @@ export function VocabKanjiClient({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          speak(flashcard.reading || flashcard.front);
+                          handleToggleSpeak(flashcard.reading || flashcard.front);
                         }}
                         className="mt-2 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-red-50 dark:border-slate-700 dark:bg-sumi-800 dark:text-slate-300"
                       >
@@ -2476,7 +2488,7 @@ export function VocabKanjiClient({
                               <button
                                 type="button"
                                 aria-label={`Nghe phát âm ${canon.writtenForm}`}
-                                onClick={() => speak(canon.kanaReading || canon.writtenForm)}
+                                onClick={() => handleToggleSpeak(canon.kanaReading || canon.writtenForm)}
                                 className="text-slate-500 hover:text-red-600 dark:text-slate-400"
                               >
                                 <Icon name="speaker" className="h-4 w-4" />

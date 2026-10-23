@@ -5,13 +5,16 @@ import type { Viseme } from "./senseiLipSync";
 /**
  * Web Audio DSP audio player for realistic Japanese Male / Female voice synthesis.
  * Uses real-time frequency analysis to drive accurate mouth visemes.
+ * Includes multi-tier TTS fallback (cached /api/ai/tts -> direct Google TTS mirror -> HTMLAudioElement).
  */
 let audioCtx: AudioContext | null = null;
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
   if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass) {
       audioCtx = new AudioContextClass();
     }
@@ -31,19 +34,150 @@ export async function playSenseiAudio(
   gender: "male" | "female",
   onStart: () => void,
   onViseme: (viseme: Viseme) => void,
-  onEnd: () => void
+  onEnd: () => void,
+  voiceParam?: string
 ): Promise<WebAudioPlayback | null> {
-  const ctx = getAudioContext();
-  if (!ctx) return null;
+  if (typeof window === "undefined" || !text) return null;
 
+  const voiceToUse = voiceParam || (gender === "male" ? "edge:ja-JP-KeitaNeural" : "edge:ja-JP-NanamiNeural");
+  const encoded = encodeURIComponent(text.slice(0, 300));
+  const primaryUrl = `/api/ai/tts?text=${encoded}&voice=${encodeURIComponent(voiceToUse)}&v=edge3`;
+  const directMirrorUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ja&client=tw-ob`;
+
+  let stopped = false;
+  let activeSource: AudioBufferSourceNode | null = null;
+  let activeAudioElement: HTMLAudioElement | null = null;
+  let animId = 0;
+
+  const handleStop = () => {
+    if (stopped) return;
+    stopped = true;
+    cancelAnimationFrame(animId);
+    onViseme("closed");
+
+    if (activeSource) {
+      try {
+        activeSource.stop();
+      } catch {}
+      activeSource = null;
+    }
+
+    if (activeAudioElement) {
+      try {
+        activeAudioElement.pause();
+        activeAudioElement.src = "";
+        activeAudioElement.load();
+      } catch {}
+      activeAudioElement = null;
+    }
+  };
+
+  const playbackController: WebAudioPlayback = {
+    stop: handleStop,
+  };
+
+  const ctx = getAudioContext();
+
+  // Helper to run viseme animation from standard HTMLAudioElement when WebAudio decode fails
+  const playViaAudioElement = (url: string) => {
+    if (stopped) return;
+    try {
+      const audio = new Audio(url);
+      activeAudioElement = audio;
+      audio.playbackRate = gender === "male" ? 0.9 : 1.0;
+
+      const visemeCycle: Viseme[] = ["a", "i", "u", "e", "o"];
+      let vIdx = 0;
+      let lastVChange = performance.now();
+
+      const animateFallback = () => {
+        if (stopped || audio.paused || audio.ended) return;
+        const now = performance.now();
+        if (now - lastVChange > 120) {
+          lastVChange = now;
+          vIdx = (vIdx + 1) % visemeCycle.length;
+          onViseme(visemeCycle[vIdx]);
+        }
+        animId = requestAnimationFrame(animateFallback);
+      };
+
+      audio.onplay = () => {
+        if (stopped) return;
+        onStart();
+        animId = requestAnimationFrame(animateFallback);
+      };
+
+      audio.onended = () => {
+        if (stopped) return;
+        stopped = true;
+        cancelAnimationFrame(animId);
+        onViseme("closed");
+        onEnd();
+      };
+
+      audio.onerror = () => {
+        if (stopped) return;
+        if (url !== directMirrorUrl) {
+          playViaAudioElement(directMirrorUrl);
+        } else {
+          stopped = true;
+          cancelAnimationFrame(animId);
+          onViseme("closed");
+          onEnd();
+        }
+      };
+
+      audio.play().catch(() => {
+        if (url !== directMirrorUrl) {
+          playViaAudioElement(directMirrorUrl);
+        } else {
+          stopped = true;
+          cancelAnimationFrame(animId);
+          onViseme("closed");
+          onEnd();
+        }
+      });
+    } catch {
+      stopped = true;
+      cancelAnimationFrame(animId);
+      onViseme("closed");
+      onEnd();
+    }
+  };
+
+  // Try fetching audio array buffer for WebAudio DSP
+  let arrayBuffer: ArrayBuffer | null = null;
   try {
-    const res = await fetch(`/api/ai/tts?text=${encodeURIComponent(text)}`);
-    if (!res.ok) throw new Error("TTS fetch failed");
-    const arrayBuffer = await res.arrayBuffer();
+    const res = await fetch(primaryUrl);
+    if (res.ok) {
+      arrayBuffer = await res.arrayBuffer();
+    }
+  } catch {}
+
+  // Fallback to direct mirror fetch if primary failed
+  if (!arrayBuffer) {
+    try {
+      const mirrorRes = await fetch(directMirrorUrl);
+      if (mirrorRes.ok) {
+        arrayBuffer = await mirrorRes.arrayBuffer();
+      }
+    } catch {}
+  }
+
+  // If fetch failed or ctx unavailable, fallback to HTMLAudioElement
+  if (!arrayBuffer || !ctx) {
+    playViaAudioElement(primaryUrl);
+    return playbackController;
+  }
+
+  // Decode audio data via Web Audio API
+  try {
     const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    if (stopped) return null;
 
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
+    activeSource = source;
 
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 256;
@@ -51,8 +185,9 @@ export async function playSenseiAudio(
     let lastNode: AudioNode = source;
 
     if (gender === "male") {
-      // Lower playback pitch to authentic Japanese male vocal register (~120Hz fundamental)
-      source.playbackRate.value = 0.82;
+      const isAuthenticMale = voiceToUse.includes("Keita") || voiceToUse.includes("Daichi") || voiceToUse.includes("Naoki") || voiceToUse.includes("onyx") || voiceToUse.includes("echo");
+      // Only pitch shift if using a generic voice without natural male timbre
+      source.playbackRate.value = isAuthenticMale ? 1.0 : 0.82;
 
       // Low-shelf boost for masculine chest warmth
       const lowShelf = ctx.createBiquadFilter();
@@ -77,11 +212,10 @@ export async function playSenseiAudio(
     analyser.connect(ctx.destination);
 
     let isPlaying = true;
-    let animId = 0;
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
     const checkMouth = () => {
-      if (!isPlaying) return;
+      if (!isPlaying || stopped) return;
       analyser.getByteFrequencyData(dataArray);
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) {
@@ -106,8 +240,9 @@ export async function playSenseiAudio(
     };
 
     source.onended = () => {
-      if (!isPlaying) return;
+      if (!isPlaying || stopped) return;
       isPlaying = false;
+      stopped = true;
       cancelAnimationFrame(animId);
       onViseme("closed");
       onEnd();
@@ -117,17 +252,10 @@ export async function playSenseiAudio(
     source.start(0);
     checkMouth();
 
-    return {
-      stop: () => {
-        isPlaying = false;
-        cancelAnimationFrame(animId);
-        onViseme("closed");
-        try {
-          source.stop();
-        } catch {}
-      },
-    };
+    return playbackController;
   } catch {
-    return null;
+    // If WebAudio decoding failed, fallback smoothly to HTMLAudioElement
+    playViaAudioElement(primaryUrl);
+    return playbackController;
   }
 }

@@ -125,7 +125,7 @@ export function KawaiiSenseiBubble() {
   const { data: session, status } = useSession();
   const { progress } = useUserProgress();
   const { nativeLanguage, setNativeLanguage, langInfo, t } = useNativeLanguage();
-  const { playClick, speak, speakingText, showToast } = useSoundAndTheme();
+  const { playClick, speak, stopSpeaking, speakingText, showToast, hasJapaneseVoice } = useSoundAndTheme();
 
   const [isOpen, setIsOpen] = useState(false);
   const [character, setCharacter] = useState<"aoi" | "ren">("aoi");
@@ -145,7 +145,233 @@ export function KawaiiSenseiBubble() {
   const [voiceInputLang, setVoiceInputLang] = useState<"ja" | "native">("ja");
   const [showLangMenu, setShowLangMenu] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  // Draggable window state
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const windowRef = useRef<HTMLDivElement | null>(null);
+  const dragStartRef = useRef<{
+    startPointerX: number;
+    startPointerY: number;
+    startLeft: number;
+    startTop: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  // Keep window within viewport bounds when window resizes
+  useEffect(() => {
+    const handleResize = () => {
+      setPosition((prev) => {
+        if (!prev || !windowRef.current) return null;
+        const rect = windowRef.current.getBoundingClientRect();
+        const pad = 8;
+        const maxX = Math.max(pad, window.innerWidth - rect.width - pad);
+        const maxY = Math.max(pad, window.innerHeight - rect.height - pad);
+        return {
+          x: Math.min(Math.max(prev.x, pad), maxX),
+          y: Math.min(Math.max(prev.y, pad), maxY),
+        };
+      });
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const handleHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only primary mouse button or touch
+    if (e.button !== 0) return;
+    // Don't drag if clicking buttons, links, or inputs
+    if ((e.target as HTMLElement).closest("button, a, input, select, [role='button']")) return;
+
+    if (!windowRef.current) return;
+    const rect = windowRef.current.getBoundingClientRect();
+
+    dragStartRef.current = {
+      startPointerX: e.clientX,
+      startPointerY: e.clientY,
+      startLeft: rect.left,
+      startTop: rect.top,
+      width: rect.width,
+      height: rect.height,
+    };
+    setIsDragging(true);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handleHeaderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging || !dragStartRef.current) return;
+    const deltaX = e.clientX - dragStartRef.current.startPointerX;
+    const deltaY = e.clientY - dragStartRef.current.startPointerY;
+
+    const newLeft = dragStartRef.current.startLeft + deltaX;
+    const newTop = dragStartRef.current.startTop + deltaY;
+
+    const pad = 8;
+    const minX = pad;
+    const maxX = Math.max(pad, window.innerWidth - dragStartRef.current.width - pad);
+    const minY = pad;
+    const maxY = Math.max(pad, window.innerHeight - dragStartRef.current.height - pad);
+
+    const clampedX = Math.min(Math.max(newLeft, minX), maxX);
+    const clampedY = Math.min(Math.max(newTop, minY), maxY);
+
+    setPosition({ x: clampedX, y: clampedY });
+  };
+
+  const handleHeaderPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      setIsDragging(false);
+      dragStartRef.current = null;
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {}
+    }
+  };
+
+    // Draggable round bubble state (optimized for touchpads, mouse & mobile touch)
+  const [bubblePosition, setBubblePosition] = useState<{ x: number; y: number } | null>(null);
+  const [isDraggingBubble, setIsDraggingBubble] = useState(false);
+  const bubbleRef = useRef<HTMLElement | null>(null);
+  const bubbleDragRef = useRef<{
+    startX: number;
+    startY: number;
+    startLeft: number;
+    startTop: number;
+    width: number;
+    height: number;
+    hasMoved: boolean;
+    currentX: number;
+    currentY: number;
+    rafId: number;
+  } | null>(null);
+
+  const handleBubblePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    if (!bubbleRef.current) return;
+    const rect = bubbleRef.current.getBoundingClientRect();
+    bubbleDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startLeft: rect.left,
+      startTop: rect.top,
+      width: rect.width,
+      height: rect.height,
+      hasMoved: false,
+      currentX: rect.left,
+      currentY: rect.top,
+      rafId: 0,
+    };
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const handleBubblePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = bubbleDragRef.current;
+    if (!drag) return;
+    const deltaX = e.clientX - drag.startX;
+    const deltaY = e.clientY - drag.startY;
+
+    // 4px movement threshold ensures quick taps on laptop touchpads don't trigger accidental drag
+    if (!drag.hasMoved && Math.hypot(deltaX, deltaY) > 4) {
+      drag.hasMoved = true;
+      setIsDraggingBubble(true);
+    }
+
+    if (drag.hasMoved) {
+      const pad = 12;
+      const minX = pad;
+      const maxX = Math.max(pad, window.innerWidth - drag.width - pad);
+      const minY = pad;
+      const maxY = Math.max(pad, window.innerHeight - drag.height - pad);
+
+      drag.currentX = Math.min(Math.max(drag.startLeft + deltaX, minX), maxX);
+      drag.currentY = Math.min(Math.max(drag.startTop + deltaY, minY), maxY);
+
+      // Direct inline DOM update for 120fps stutter-free dragging on laptop touchpads
+      if (bubbleRef.current) {
+        bubbleRef.current.style.left = `${drag.currentX}px`;
+        bubbleRef.current.style.top = `${drag.currentY}px`;
+        bubbleRef.current.style.bottom = "auto";
+        bubbleRef.current.style.right = "auto";
+      }
+
+      // Schedule React state sync via requestAnimationFrame
+      if (!drag.rafId) {
+        drag.rafId = requestAnimationFrame(() => {
+          if (bubbleDragRef.current) {
+            setBubblePosition({ x: bubbleDragRef.current.currentX, y: bubbleDragRef.current.currentY });
+            bubbleDragRef.current.rafId = 0;
+          }
+        });
+      }
+    }
+  };
+
+  const handleBubblePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = bubbleDragRef.current;
+    if (!drag) return;
+    if (drag.rafId) cancelAnimationFrame(drag.rafId);
+    const wasMoved = drag.hasMoved;
+    const finalX = drag.currentX;
+    const finalY = drag.currentY;
+    setIsDraggingBubble(false);
+    bubbleDragRef.current = null;
+
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+
+    if (wasMoved) {
+      // Commit final position to React state
+      setBubblePosition({ x: finalX, y: finalY });
+    } else {
+      // Clean click / tap on laptop touchpad
+      playClick();
+      const nextOpen = !isOpen;
+      setIsOpen(nextOpen);
+      if (!nextOpen) {
+        stopSpeaking();
+      }
+    }
+  };
+
+  // Compute smart initial positioning for chat popup relative to bubble position
+  const getPopupWindowPosition = () => {
+    if (position) {
+      return {
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        bottom: "auto",
+        right: "auto",
+      };
+    }
+    if (bubblePosition && typeof window !== "undefined") {
+      const pad = 12;
+      const popupWidth = Math.min(410, window.innerWidth * 0.92);
+      const popupHeight = Math.min(580, window.innerHeight * 0.82);
+
+      let targetX = bubblePosition.x - (popupWidth - 64);
+      let targetY = bubblePosition.y - popupHeight - 12;
+
+      if (targetY < pad) {
+        targetY = bubblePosition.y + 70;
+      }
+
+      const clampedX = Math.min(Math.max(targetX, pad), window.innerWidth - popupWidth - pad);
+      const clampedY = Math.min(Math.max(targetY, pad), window.innerHeight - popupHeight - pad);
+
+      return {
+        left: `${clampedX}px`,
+        top: `${clampedY}px`,
+        bottom: "auto",
+        right: "auto",
+      };
+    }
+    return undefined;
+  };
+
+const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   // Auto-scroll messages
@@ -174,6 +400,9 @@ export function KawaiiSenseiBubble() {
   const toggleAutoSpeak = () => {
     const nextVal = !autoSpeak;
     setAutoSpeak(nextVal);
+    if (!nextVal) {
+      stopSpeaking();
+    }
     playClick();
     try {
       localStorage.setItem("nq_sensei_autospeak", String(nextVal));
@@ -398,8 +627,24 @@ export function KawaiiSenseiBubble() {
     <>
       {/* ================= FLOATING CIRCULAR BUBBLE BUTTON ================= */}
       <aside
+          ref={bubbleRef}
           aria-label="Kawaii Sensei Assistant"
-          className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-40 select-none flex flex-col items-end gap-2"
+          style={
+            bubblePosition
+              ? {
+                  left: `${bubblePosition.x}px`,
+                  top: `${bubblePosition.y}px`,
+                  bottom: "auto",
+                  right: "auto",
+                  touchAction: "none",
+                }
+              : {
+                  touchAction: "none",
+                }
+          }
+          className={`fixed z-40 select-none flex flex-col items-end gap-2 will-change-transform ${
+            !bubblePosition ? "bottom-20 right-4 sm:bottom-6 sm:right-6" : ""
+          } ${isDraggingBubble ? "cursor-grabbing transition-none select-none" : "cursor-grab transition-transform duration-150"}`}
         >
           {/* Unread / Attention mini pill */}
           {!isOpen && !hasInteracted && (progress?.stats?.dueReviewCount ?? 0) > 0 && (
@@ -411,11 +656,13 @@ export function KawaiiSenseiBubble() {
 
           <button
             type="button"
-            onClick={() => {
-              playClick();
-              setIsOpen(!isOpen);
-            }}
-            aria-label="Mở trợ lý AI Kawaii Sensei"
+            onPointerDown={handleBubblePointerDown}
+            onPointerMove={handleBubblePointerMove}
+            onPointerUp={handleBubblePointerUp}
+            onPointerCancel={handleBubblePointerUp}
+            onDoubleClick={() => setBubblePosition(null)}
+            aria-label="Mở trợ lý AI Kawaii Sensei (Kéo để di chuyển, nhấp đúp để đặt lại vị trí)"
+            title="Kéo để di chuyển bong bóng quanh màn hình • Nhấp đúp để đặt lại góc dưới"
             className={`group relative flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-[0_8px_30px_rgba(225,29,72,0.35)] transition-all duration-300 hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-red-400/50 ${
               isOpen
                 ? "bg-slate-900 border-2 border-red-500 rotate-90"
@@ -450,13 +697,35 @@ export function KawaiiSenseiBubble() {
       {/* ================= CHAT POPUP WINDOW ================= */}
       {isOpen && (
         <div
+          ref={windowRef}
           role="dialog"
           aria-label="Trợ lý AI Kawaii Sensei"
-          className="fixed bottom-24 right-4 sm:bottom-24 sm:right-6 z-50 w-[92vw] sm:w-[410px] h-[580px] max-h-[82vh] bg-white dark:bg-sumi-900 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-rose-200 dark:border-sumi-700 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          style={getPopupWindowPosition()}
+          className={`fixed z-50 w-[92vw] sm:w-[410px] h-[580px] max-h-[82vh] bg-white dark:bg-sumi-900 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-rose-200 dark:border-sumi-700 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${
+            !position && !bubblePosition ? "bottom-24 right-4 sm:bottom-24 sm:right-6" : ""
+          }`}
         >
-          {/* Header */}
-          <div className="relative bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 p-3.5 text-white flex items-center justify-between shrink-0 shadow-md">
-            <div className="flex items-center gap-2.5">
+          {/* Header (Draggable handle with pointer capture) */}
+          <div
+            onPointerDown={handleHeaderPointerDown}
+            onPointerMove={handleHeaderPointerMove}
+            onPointerUp={handleHeaderPointerUp}
+            onPointerCancel={handleHeaderPointerUp}
+            onDoubleClick={() => { setPosition(null); setBubblePosition(null); }}
+            title="Kéo thanh tiêu đề để di chuyển • Nhấp đúp để đặt lại vị trí góc dưới"
+            className={`relative bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 p-3.5 text-white flex items-center justify-between shrink-0 shadow-md select-none ${
+              isDragging ? "cursor-grabbing" : "cursor-grab"
+            }`}
+            style={{ touchAction: "none" }}
+          >
+            <div className="flex items-center gap-2">
+              {/* Drag Handle Grip Icon */}
+              <span
+                className="text-white/60 hover:text-white text-sm font-mono cursor-grab active:cursor-grabbing px-0.5"
+                title="Kéo để di chuyển cửa sổ"
+              >
+                ⠿
+              </span>
               <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white/80 bg-white/20 shrink-0">
                 <Image
                   src={currentPortrait}
@@ -475,6 +744,14 @@ export function KawaiiSenseiBubble() {
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/25 text-white font-bold uppercase">
                     AI Tutor
                   </span>
+                  {!hasJapaneseVoice && (
+                    <span
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-amber-400/30 text-white font-medium"
+                      title="Thiết bị chưa có giọng Nhật offline. Đang dùng Cloud TTS trực tuyến."
+                    >
+                      Cloud TTS
+                    </span>
+                  )}
                 </div>
                 <div className="text-[11px] text-white/85 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -485,20 +762,46 @@ export function KawaiiSenseiBubble() {
               </div>
             </div>
 
-            {/* Header Controls: Voice Toggle, Native Lang Picker & Close */}
+            {/* Header Controls: Voice Toggle/Mute, Native Lang Picker, Reset Position & Close */}
             <div className="flex items-center gap-1">
-              {/* Voice Auto-Speak Toggle */}
+              {/* Reset Dragged Position (only shown when moved) */}
+              {(position || bubblePosition) && (
+                <button
+                  type="button"
+                  onClick={() => { setPosition(null); setBubblePosition(null); }}
+                  title="Đặt lại vị trí góc màn hình"
+                  className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition"
+                >
+                  📍
+                </button>
+              )}
+
+              {/* Voice Speak / Immediate Mute Toggle */}
               <button
                 type="button"
-                onClick={toggleAutoSpeak}
-                title={autoSpeak ? "Tắt tự động đọc giọng nói" : "Bật tự động đọc giọng nói của Sensei"}
+                onClick={() => {
+                  if (speakingText) {
+                    stopSpeaking();
+                  } else {
+                    toggleAutoSpeak();
+                  }
+                }}
+                title={
+                  speakingText
+                    ? "Đang phát âm thanh — Nhấn để tắt tiếng ngay lập tức"
+                    : autoSpeak
+                    ? "Tắt tự động đọc giọng nói"
+                    : "Bật tự động đọc giọng nói của Sensei"
+                }
                 className={`p-1.5 rounded-full transition text-xs font-bold ${
-                  autoSpeak
+                  speakingText
+                    ? "bg-red-500 text-white animate-pulse shadow-md ring-2 ring-white/60"
+                    : autoSpeak
                     ? "bg-white text-red-600 shadow-sm"
                     : "bg-white/20 text-white hover:bg-white/30"
                 }`}
               >
-                {autoSpeak ? "🔊" : "🔇"}
+                {speakingText ? "⏹️" : autoSpeak ? "🔊" : "🔇"}
               </button>
 
               {/* Native Language Picker Dropdown */}
@@ -567,6 +870,7 @@ export function KawaiiSenseiBubble() {
                 type="button"
                 onClick={() => {
                   playClick();
+                  stopSpeaking();
                   setIsOpen(false);
                 }}
                 className="p-1 rounded-full text-white/80 hover:text-white hover:bg-white/20 transition text-sm"
@@ -649,18 +953,36 @@ export function KawaiiSenseiBubble() {
 
                     {!isUser && (
                       <div className="mt-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-[11px] text-slate-400">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const jaPart = m.content.split("\n\n*")[0] || m.content;
-                            speak(jaPart);
-                          }}
-                          className="hover:text-red-500 font-bold flex items-center gap-1 transition"
-                          title={t("listenToSensei") || "Nghe Sensei phát âm"}
-                        >
-                          <span>🔊</span>
-                          <span>{t("listenAudio") || "Nghe đọc"}</span>
-                        </button>
+                        {(() => {
+                          const jaPart = m.content.split("\n\n*")[0] || m.content;
+                          const isCurrentSpeaking =
+                            speakingText !== null && (speakingText === jaPart || speakingText === m.content);
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isCurrentSpeaking) {
+                                  stopSpeaking();
+                                } else {
+                                  speak(jaPart);
+                                }
+                              }}
+                              className={`font-bold flex items-center gap-1 transition px-2 py-0.5 rounded-full ${
+                                isCurrentSpeaking
+                                  ? "bg-red-500 text-white animate-pulse shadow-sm"
+                                  : "hover:text-red-500 text-slate-500 dark:text-slate-400"
+                              }`}
+                              title={
+                                isCurrentSpeaking
+                                  ? "Đang phát âm thanh — Nhấn để tắt tiếng ngay"
+                                  : t("listenToSensei") || "Nghe Sensei phát âm"
+                              }
+                            >
+                              <span>{isCurrentSpeaking ? "⏹️" : "🔊"}</span>
+                              <span>{isCurrentSpeaking ? "Dừng đọc" : t("listenAudio") || "Nghe đọc"}</span>
+                            </button>
+                          );
+                        })()}
                         <span>
                           {new Date(m.timestamp).toLocaleTimeString([], {
                             hour: "2-digit",

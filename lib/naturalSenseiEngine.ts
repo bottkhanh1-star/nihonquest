@@ -115,6 +115,37 @@ export function generateNaturalJapaneseResponse({
     return `Great news: **No pending mistakes found!** ✨ Your accuracy is solid. Keep moving forward on your [Learning Path](/app/path)!`;
   }
 
+  // 0.1 GRAMMAR & VOCABULARY EXPLANATION
+  if (/(?:giải thích|ngữ pháp|nghĩa là gì|là gì|cấu trúc|nghĩa|explain|grammar|what does .* mean|语法|解释)/i.test(msg)) {
+    if (/(?:わたしは|私は|watashi wa).*?(?:学生|がくせい)/i.test(msg)) {
+      if (isVi) {
+        return "Cấu trúc câu 「わたしは 学生です。」 (Tôi là học sinh/sinh viên): 🌸\n\n" +
+          "• **Cấu trúc:** 「A は B です」 = A là B.\n" +
+          "• **わたし (watashi):** Tôi (chủ đề câu).\n" +
+          "• **は (wa):** Trợ từ chủ đề, đọc là \"wa\" dù viết là \"ha\".\n" +
+          "• **学生 (gakusei):** Học sinh / Sinh viên (danh từ).\n" +
+          "• **です (desu):** Là (đuôi câu khẳng định lịch sự).\n\n" +
+          "💡 **Ví dụ:** 田中さんは先生です。(Anh Tanaka là giáo viên.) ✨";
+      }
+      if (isZh) {
+        return "句型「わたしは 学生です。」（我是学生）：🌸\n\n" +
+          "• **句型：** 「A は B です」 = A 是 B。\n" +
+          "• **わたし (watashi):** 我（句子主题）。\n" +
+          "• **は (wa):** 主题提示助词，读作 \"wa\"。\n" +
+          "• **学生 (gakusei):** 学生（名词）。\n" +
+          "• **です (desu):** 是（敬体肯定句尾）。\n\n" +
+          "💡 **例句：** 田中さんは先生です。(田中先生是老师。) ✨";
+      }
+      return "Grammar breakdown for 「わたしは 学生です。」 (I am a student): 🌸\n\n" +
+        "• **Pattern:** 「A は B です」 = A is B.\n" +
+        "• **わたし (watashi):** I (topic).\n" +
+        "• **は (wa):** Topic marker particle, pronounced \"wa\".\n" +
+        "• **学生 (gakusei):** Student (noun).\n" +
+        "• **です (desu):** Am / is (polite sentence ending).\n\n" +
+        "💡 **Example:** 田中さんは先生です。(Mr. Tanaka is a teacher.) ✨";
+    }
+  }
+
   // 1. PROGRESS, STUDY ADVICE & TUTOR ASSISTANCE
   if (
     /(?:hôm nay học gì|học gì|tiến độ|tiến trình|srs|thẻ ôn|lời khuyên|gợi ý|thống kê|kế hoạch|bắt đầu|what should i study|study advice|my progress|review cards|今天学什么|学什么|进度|复习卡片|学习建议|学习规划|오늘 뭐 공부해)/i.test(

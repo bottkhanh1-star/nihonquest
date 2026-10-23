@@ -41,8 +41,10 @@ interface SoundAndThemeContextType {
   speechVoiceURI: string;
   setSpeechVoiceURI: (uri: string) => void;
   availableVoices: VoiceOption[];
-  speak: (text: string, customRate?: number) => void;
+  speak: (text: string, customRate?: number, customVoiceURI?: string) => void;
   speakAll: (texts: string[], customRate?: number) => void;
+  stopSpeaking: () => void;
+  hasJapaneseVoice: boolean;
   /** Đoạn text đang được đọc (null nếu không đọc) – dùng để làm nổi nút ▶ tương ứng. */
   speakingText: string | null;
 
@@ -64,8 +66,28 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
   const [speechVoiceURI, setSpeechVoiceURIState] = useState<string>("");
   const [availableVoices, setAvailableVoices] = useState<VoiceOption[]>([]);
   const [speakingText, setSpeakingText] = useState<string | null>(null);
+  const [hasJapaneseVoice, setHasJapaneseVoice] = useState<boolean>(true);
   const speakIdRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stopSpeaking = useCallback(() => {
+    speakIdRef.current++;
+    setSpeakingText(null);
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+    if (activeAudioRef.current) {
+      try {
+        activeAudioRef.current.pause();
+        activeAudioRef.current.currentTime = 0;
+        activeAudioRef.current.src = "";
+      } catch {}
+      activeAudioRef.current = null;
+    }
+  }, []);
 
   // Initialize from localStorage & load voices
   useEffect(() => {
@@ -115,8 +137,11 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
             voiceURI: v.voiceURI,
           }));
 
+        const hasJa = jaVoices.length > 0;
+        setHasJapaneseVoice(hasJa);
+
         // If no strict Japanese match, list all voices as fallback
-        const finalVoices = jaVoices.length > 0 ? jaVoices : voices.slice(0, 15).map((v) => ({
+        const finalVoices = hasJa ? jaVoices : voices.slice(0, 15).map((v) => ({
           name: v.name,
           lang: v.lang,
           voiceURI: v.voiceURI,
@@ -133,6 +158,12 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
   }, []);
 
   // Sync theme with HTML document class
+  useEffect(() => {
+    return () => {
+      stopSpeaking();
+    };
+  }, [stopSpeaking]);
+
   useEffect(() => {
     const root = document.documentElement;
     const applyDark = () => {
@@ -175,6 +206,9 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
 
   const setSoundEnabled = (s: boolean) => {
     setSoundEnabledState(s);
+    if (!s) {
+      stopSpeaking();
+    }
     try {
       localStorage.setItem("nq_sound", String(s));
     } catch {}
@@ -194,38 +228,86 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
     } catch {}
   };
 
-  // Global Speech Function with Speech Synthesis & Audio Fallback
+  // Global Speech Function — routes to cloud TTS or WebSpeech based on selected voice
   const speak = useCallback(
-    (text: string, customRate?: number) => {
+    (text: string, customRate?: number, customVoiceURI?: string) => {
       if (!text || typeof window === "undefined") return;
-      const cleanText = text.replace(/[\(\[\{].*?[\)\]\}]/g, "").trim();
+      const cleanText = text
+        .replace(/\p{Extended_Pictographic}/gu, "")
+        .replace(/[\(\[\{（【].*?[\)\]\}）】]/g, "")
+        .trim();
       if (!cleanText) return;
+
+      stopSpeaking();
 
       const speakId = ++speakIdRef.current;
       const finish = () => {
-        if (speakIdRef.current === speakId) setSpeakingText(null);
+        if (speakIdRef.current === speakId) {
+          setSpeakingText(null);
+          activeAudioRef.current = null;
+        }
       };
       setSpeakingText(text);
 
-      const playAudioFallback = (t: string) => {
+      const targetVoice = customVoiceURI !== undefined ? customVoiceURI : speechVoiceURI;
+
+      /** Play audio from our proxy TTS API (Edge Neural / Google / OpenAI) */
+      const playApiAudio = (voiceApiParam: string, fallbackToDefault = true) => {
         try {
-          const encoded = encodeURIComponent(t.slice(0, 200));
-          const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ja&client=tw-ob`;
+          const encoded = encodeURIComponent(cleanText.slice(0, 300));
+          const voiceQuery = voiceApiParam ? `&voice=${encodeURIComponent(voiceApiParam)}` : "";
+          const url = `/api/ai/tts?text=${encoded}${voiceQuery}&v=edge3`;
           const audio = new Audio(url);
+          activeAudioRef.current = audio;
+          audio.playbackRate = customRate ?? speechRate;
           audio.onended = finish;
-          audio.onerror = finish;
-          audio.play().catch(finish);
+          audio.onerror = () => {
+            if (speakIdRef.current !== speakId) return;
+            if (fallbackToDefault && voiceApiParam !== "") {
+              playApiAudio("", false);
+            } else {
+              try {
+                const directAudio = new Audio(
+                  `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ja&client=tw-ob`
+                );
+                activeAudioRef.current = directAudio;
+                directAudio.playbackRate = customRate ?? speechRate;
+                directAudio.onended = finish;
+                directAudio.onerror = finish;
+                directAudio.play().catch(finish);
+              } catch {
+                finish();
+              }
+            }
+          };
+          audio.play().catch(() => {
+            if (speakIdRef.current === speakId) finish();
+          });
         } catch {
           finish();
         }
       };
 
+      // ── Cloud voice selected: bypass WebSpeech entirely ──
+      if (targetVoice.startsWith("cloud:")) {
+        const withoutPrefix = targetVoice.slice("cloud:".length);
+        // "google:default" → use empty param (default Google)
+        const apiParam = withoutPrefix === "google:default" ? "" : withoutPrefix;
+        playApiAudio(apiParam);
+        return;
+      }
+
+      // ── Try WebSpeech with device voice ──
       try {
         if ("speechSynthesis" in window) {
           window.speechSynthesis.cancel();
           const allSystemVoices = window.speechSynthesis.getVoices();
           const hasJaVoice = allSystemVoices.some(
-            (v) => v.lang.startsWith("ja") || v.lang.includes("JP") || v.lang.includes("ja")
+            (v) =>
+              (v.lang || "").toLowerCase().startsWith("ja") ||
+              (v.lang || "").toLowerCase().includes("jp") ||
+              (v.name || "").toLowerCase().includes("japanese") ||
+              (v.name || "").includes("日本語")
           );
 
           if (hasJaVoice) {
@@ -233,25 +315,22 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
             u.lang = "ja-JP";
             u.rate = customRate ?? speechRate;
 
-            let matchedVoice = null;
-            if (speechVoiceURI) {
-              matchedVoice = allSystemVoices.find(
-                (v) => v.voiceURI === speechVoiceURI || v.name === speechVoiceURI
-              );
-            }
+            let matchedVoice = targetVoice
+              ? (allSystemVoices.find((v) => v.voiceURI === targetVoice || v.name === targetVoice) ?? null)
+              : null;
             if (!matchedVoice) {
-              matchedVoice = allSystemVoices.find(
-                (v) => v.lang.startsWith("ja") || v.lang.includes("JP") || v.lang.includes("ja")
-              );
+              matchedVoice =
+                allSystemVoices.find((v) => (v.lang || "").toLowerCase().startsWith("ja")) ?? null;
             }
-            if (matchedVoice) {
-              u.voice = matchedVoice;
-            }
+            if (matchedVoice) u.voice = matchedVoice;
 
             u.onend = finish;
-            u.onerror = () => {
-              // cancel() của lần đọc trước cũng bắn onerror – chỉ fallback nếu đây vẫn là lần đọc hiện tại
-              if (speakIdRef.current === speakId) playAudioFallback(cleanText);
+            u.onerror = (e) => {
+              if (speakIdRef.current === speakId && e.error !== "canceled" && e.error !== "interrupted") {
+                playApiAudio("");
+              } else {
+                finish();
+              }
             };
 
             window.speechSynthesis.speak(u);
@@ -260,11 +339,11 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
         }
       } catch {}
 
-      playAudioFallback(cleanText);
+      // ── No device Japanese voice → use cloud TTS ──
+      playApiAudio("");
     },
-    [speechRate, speechVoiceURI]
+    [speechRate, speechVoiceURI, stopSpeaking]
   );
-
   const speakAll = useCallback(
     (texts: string[], customRate?: number) => {
       if (typeof window === "undefined") return;
@@ -442,6 +521,8 @@ export function SoundAndThemeProvider({ children }: { children: React.ReactNode 
         availableVoices,
         speak,
         speakAll,
+        stopSpeaking,
+        hasJapaneseVoice,
         speakingText,
         toasts,
         showToast,

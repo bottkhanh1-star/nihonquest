@@ -292,15 +292,16 @@ ${studentNameText}- Trình độ JLPT hiện tại: ${progressLevel} (Cấp đ�
 
       const systemPrompt = `${baseInstruction}${progressSnippet}${mistakesSnippet}
 CRITICAL PEDAGOGICAL & LANGUAGE DIRECTIVE:
-1. STRICT CONCISENESS & CLARITY (QUY TẮC BẮT BUỘC: NGẮN GỌN & TRỌNG TÂM):
-   - Trả lời NGẮN GỌN, ĐÚNG TRỌNG TÂM, tối đa 2 đến 4 câu ngắn.
-   - TUYỆT ĐỐI KHÔNG DÀI DÒNG, KHÔNG GIẢI THÍCH MÁY MÓC LAN MAN. Người học đọc trên màn hình điện thoại rất mệt nếu câu trả lời quá dài.
-   - BỎ TOÀN BỘ các câu mở đầu sáo rỗng hoặc chào hỏi lặp đi lặp lại (như "Chào bạn-san, Sensei rất vui..."). Đi thẳng vào nội dung câu trả lời ngay từ câu đầu tiên.
-   - Nếu giải thích từ vựng hoặc ngữ pháp:
-     • Dòng 1: Nghĩa hoặc quy tắc cốt lõi (1 câu duy nhất).
-     • Dòng 2: Cách dùng hoặc ngữ cảnh hay gặp (1 dòng ngắn).
-     • Dòng 3: 1 câu ví dụ tiếng Nhật duy nhất kèm dịch nghĩa bằng ${nativeLangName}.
-   - Tránh văn phong thuyết giảng như sách giáo khoa, hãy nói chuyện tự nhiên, gần gũi, súc tích như đang nhắn tin trò chuyện với học viên.
+1. STRICT CONCISENESS & COMPLETENESS (NGẮN GỌN, ĐẦY ĐỦ, ĐÚNG TRỌNG TÂM):
+   - Phản hồi ĐẦY ĐỦ Ý nhưng NGẮN GỌN, súc tích (khoảng 3 đến 5 gạch đầu dòng ngắn).
+   - TUYỆT ĐỐI KHÔNG DỪNG CỤT LỦN, KHÔNG BỎ DỞ CÂU GIỮA CHỪNG. Luôn hoàn thành trọn vẹn câu trả lời.
+   - TUYỆT ĐỐI KHÔNG DÀI DÒNG LAN MAN, không giải thích quá hàn lâm hay viết thành bài văn dài gây mỏi mắt cho người học.
+   - BỎ TOÀN BỘ các câu mở đầu chào hỏi sáo rỗng. Đi thẳng vào nội dung cốt lõi ngay từ dòng đầu tiên.
+   - Khi giải thích ngữ pháp hoặc câu tiếng Nhật:
+     • Dòng 1: Cấu trúc & ý nghĩa tổng quan của câu (ngắn gọn trong 1 câu).
+     • Dòng 2-4: Phân tích nhanh các thành phần chính (Chủ ngữ, Trợ từ, Vị ngữ/Đuôi câu).
+     • Dòng cuối: 1 câu ví dụ tương tự ngắn kèm dịch nghĩa bằng ${nativeLangName}.
+   - Tránh văn phong thuyết giảng sách giáo khoa, hãy nói chuyện tự nhiên, gần gũi, súc tích như gia sư nhắn tin trực tiếp với học viên.
 2. NATIVE-LANGUAGE-FIRST RULE:
    - The learner's native mother tongue is: ${nativeLangName} (${nativeLanguage}).
    - You MUST explain grammar, provide meanings, analyze mistakes, give feedback, and formulate hints EXCLUSIVELY in ${nativeLangName}.
@@ -308,7 +309,7 @@ CRITICAL PEDAGOGICAL & LANGUAGE DIRECTIVE:
    - If the learner's language is Vietnamese, write all explanations and translations in Vietnamese.
    - Japanese MUST be preserved for the target learning content: Japanese dialogue lines, Kanji, Hiragana, Katakana, and examples.
 3. PROGRESS-AWARE TUTORING:
-   - Address the student warmly ${userName ? `as "${userName}-san"` : ""}.
+   - Có thể xưng hô thân mật ${userName ? `"${userName}-san"` : ""} khi nhận xét hoặc động viên, nhưng KHÔNG để lời chào chiếm chỗ câu giải thích.
    - When asked what to study today or about progress, give a quick, punchy 2-line recommendation based on their metrics (JLPT ${progressLevel}, ${progressStreak}-day streak, ${progressDue} due SRS cards).
    - When asked about mistakes, state the exact reason in 1 sentence and give 1 quick fix.
 4. KAWAII & ENCOURAGING PERSONA:
@@ -343,9 +344,9 @@ CRITICAL PEDAGOGICAL & LANGUAGE DIRECTIVE:
                   model: grModel,
                   messages: grokMessages,
                   temperature: 0.7,
-                  max_tokens: 380,
+                  max_tokens: 1000,
                 }),
-                signal: AbortSignal.timeout(3500),
+                signal: AbortSignal.timeout(8000),
               });
 
               if (grRes.ok) {
@@ -395,9 +396,9 @@ CRITICAL PEDAGOGICAL & LANGUAGE DIRECTIVE:
                   model: gModel,
                   messages: groqMessages,
                   temperature: 0.7,
-                  max_tokens: 380,
+                  max_tokens: 1000,
                 }),
-                signal: AbortSignal.timeout(3500),
+                signal: AbortSignal.timeout(8000),
               });
 
               if (groqRes.ok) {
@@ -452,9 +453,9 @@ CRITICAL PEDAGOGICAL & LANGUAGE DIRECTIVE:
                   model: orModel,
                   messages: orMessages,
                   temperature: 0.7,
-                  max_tokens: 380,
+                  max_tokens: 1000,
                 }),
-                signal: AbortSignal.timeout(3500),
+                signal: AbortSignal.timeout(8000),
               });
 
               if (orRes.ok) {
@@ -503,7 +504,7 @@ CRITICAL PEDAGOGICAL & LANGUAGE DIRECTIVE:
           const payload = {
             system_instruction: { parts: [{ text: systemPrompt }] },
             contents: geminiContents,
-            generationConfig: { temperature: 0.7, maxOutputTokens: 380 },
+            generationConfig: { temperature: 0.7, maxOutputTokens: 1000, thinkingConfig: { thinkingBudget: 0 } },
           };
 
           const requestedModel =
@@ -514,7 +515,7 @@ CRITICAL PEDAGOGICAL & LANGUAGE DIRECTIVE:
           const clientModel = isValidGeminiModel ? requestedModel : undefined;
 
           const modelsToTry = Array.from(
-            new Set([clientModel, "gemini-2.5-flash", "gemini-flash-latest"].filter(Boolean) as string[]),
+            new Set([clientModel, "gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest"].filter(Boolean) as string[]),
           );
 
           for (const modelName of modelsToTry) {
@@ -526,7 +527,7 @@ CRITICAL PEDAGOGICAL & LANGUAGE DIRECTIVE:
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify(payload),
-                  signal: AbortSignal.timeout(3500),
+                  signal: AbortSignal.timeout(8000),
                 },
               );
 

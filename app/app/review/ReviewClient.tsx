@@ -69,19 +69,24 @@ const termSize = (text: string) => {
 
 // ======================== Nút phát âm dùng lại ở cột "Hàng đợi" ========================
 export function SpeakButton({ text, className = "rv-icon-btn", size = 16 }: { text: string; className?: string; size?: number }) {
-  const { speak } = useSoundAndTheme();
+  const { speak, stopSpeaking, speakingText } = useSoundAndTheme();
+  const isPlaying = speakingText === text;
   return (
     <button
       type="button"
-      className={className}
-      aria-label={`Phát âm: ${text}`}
-      title="Phát âm tiếng Nhật"
+      className={`${className} ${isPlaying ? "text-red-500 animate-pulse ring-1 ring-red-400" : ""}`}
+      aria-label={isPlaying ? `Dừng phát âm: ${text}` : `Phát âm: ${text}`}
+      title={isPlaying ? "Dừng phát âm" : "Phát âm tiếng Nhật"}
       onClick={(e) => {
         e.stopPropagation();
-        speak(text);
+        if (isPlaying) {
+          stopSpeaking();
+        } else {
+          speak(text);
+        }
       }}
     >
-      <Icon name="speaker" size={size} />
+      {isPlaying ? <span className="text-xs">⏹️</span> : <Icon name="speaker" size={size} />}
     </button>
   );
 }

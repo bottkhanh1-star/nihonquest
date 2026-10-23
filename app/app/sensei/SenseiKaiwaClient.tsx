@@ -304,6 +304,7 @@ export function SenseiKaiwaClient({ recentLessons = [] }: SenseiKaiwaClientProps
   };
 
   const handleSelectCharacter = (id: SenseiCharacterId) => {
+    voice.cancel();
     if (id === characterId) return;
     playClick();
     switchCharacter(id, autoVoice);
@@ -891,11 +892,33 @@ export function SenseiKaiwaClient({ recentLessons = [] }: SenseiKaiwaClientProps
                         <span className="truncate">{t("senseiWithTeacher", { name: character.nameRomaji })}</span>
                         <span aria-hidden="true" className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
                         <span className="truncate text-[10px] sm:text-[11px]" role="status" aria-live="polite">{statusLabel}</span>
+                        {!voice.hasJapaneseVoice && (
+                          <span
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-amber-400/25 text-amber-700 dark:text-amber-300 font-bold"
+                            title="Thiết bị chưa có giọng Nhật offline. Đang dùng Cloud TTS trực tuyến."
+                          >
+                            Cloud TTS
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                    {voice.isSpeaking && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          voice.cancel();
+                          playClick();
+                        }}
+                        className="inline-flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 rounded-full border border-red-300 bg-red-50 text-red-600 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold transition hover:bg-red-100 active:scale-95 animate-pulse"
+                        title="Dừng âm thanh Sensei ngay lập tức"
+                      >
+                        <span className="text-xs">⏹️</span>
+                        <span>Dừng nói</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={toggleSaved}

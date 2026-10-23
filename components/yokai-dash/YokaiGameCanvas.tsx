@@ -28,6 +28,7 @@ import { disposeThreeHierarchy, disposeSingleMaterial } from "@/lib/yokai-dash/t
 import { buildZoneScenery, createObstacleSkin, getZoneTheme } from "@/lib/yokai-dash/zone-scenery";
 import { HeartIcon, HudChip, HudIconButton } from "./YokaiGameUI";
 import { useNativeLanguage } from "@/components/LanguageContext";
+import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 import { getObstacleMetaLocalized, localizeYokaiQuestion } from "@/lib/yokai-dash/yokaiLocalization";
 
 interface YokaiGameCanvasProps {
@@ -107,6 +108,7 @@ export function YokaiGameCanvas({
 
   // Gợi ý vòng vàng (đáp án đúng): Có thể bật / tắt realtime
   const { nativeLanguage } = useNativeLanguage();
+  const { speak, soundEnabled } = useSoundAndTheme();
   const isEn = nativeLanguage === "en";
   const isZh = nativeLanguage === "zh-CN" || nativeLanguage === "zh-TW";
   const isKo = nativeLanguage === "ko";
@@ -289,19 +291,13 @@ export function YokaiGameCanvas({
     return id;
   }, []);
 
-  // TTS helper
+  // TTS helper with multi-tier fallback & sound toggle check
   const speakCurrentQuestion = useCallback(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (!soundEnabled) return;
     const q = gameStateRef.current.questions[gameStateRef.current.currentQuestionIndex];
     if (!q || !q.audioText) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(q.audioText);
-      utterance.lang = "ja-JP";
-      utterance.rate = 0.85;
-      window.speechSynthesis.speak(utterance);
-    } catch {}
-  }, []);
+    speak(q.audioText, 0.85);
+  }, [speak, soundEnabled]);
 
   // Controls with strict cooldown guards (prevents skipping 2 lanes in 1 tap)
   const selectLane = useCallback((laneIdx: 0 | 1 | 2) => {

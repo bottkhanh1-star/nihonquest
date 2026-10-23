@@ -60,6 +60,7 @@ interface SpeakOptions {
  * - Chọn giọng theo giới tính của nhân vật (không theo mặc định của thiết bị).
  * - Khẩu hình chạy theo onstart/onboundary/onend của chính utterance, nên bắt đầu
  *   và dừng đúng lúc âm thanh thật, không dùng setTimeout ước lượng.
+ * - Hỗ trợ multi-tier fallback (Cloud TTS / Google mirror) nếu máy không cài sẵn gói tiếng Nhật.
  */
 export type VoiceSource = "manual" | "global" | "auto";
 
@@ -100,6 +101,10 @@ export function useSenseiVoice(character: SenseiCharacter) {
     synth.addEventListener("voiceschanged", load);
     return () => synth.removeEventListener("voiceschanged", load);
   }, [supported]);
+
+  const hasJapaneseVoice = useMemo(() => {
+    return raw.some(isJa);
+  }, [raw]);
 
   const voices: JaVoice[] = useMemo(
     () => raw.map((v) => ({ uri: v.voiceURI, name: v.name, guess: guessVoiceGender(v.name), local: v.localService })),
@@ -184,12 +189,19 @@ export function useSenseiVoice(character: SenseiCharacter) {
   const cancel = useCallback(() => {
     runId.current++;
     if (activeAudioPlayback.current) {
-      activeAudioPlayback.current.stop();
+      try {
+        activeAudioPlayback.current.stop();
+      } catch {}
       activeAudioPlayback.current = null;
     }
     stopLoop();
     setIsSpeaking(false);
-    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
   }, [stopLoop]);
 
   const speak = useCallback(
@@ -217,12 +229,15 @@ export function useSenseiVoice(character: SenseiCharacter) {
       const pitch = exact ? ch.voice.pitch : ch.voice.fallbackPitch;
       const rate = opts.rate ?? rateRef.current;
 
-      // Nếu là giọng Nam và thiết bị không có giọng nam tự nhiên: phát qua Web Audio DSP Engine
-      if (ch.gender === "male" && !exact) {
+      const hasJa = raw.some(isJa);
+      const isCloudSelected = speechVoiceURI.startsWith("cloud:");
+      // Nếu chọn giọng Cloud HOẶC máy không có giọng tiếng Nhật HOẶC nhân vật Nam không có giọng nam tự nhiên
+      if (isCloudSelected || !hasJa || (ch.gender === "male" && !exact)) {
         setIsSpeaking(true);
+        const cloudVoiceParam = isCloudSelected ? speechVoiceURI.slice("cloud:".length) : undefined;
         playSenseiAudio(
           text,
-          "male",
+          ch.gender,
           () => {
             if (id === runId.current) setIsSpeaking(true);
           },
@@ -234,15 +249,16 @@ export function useSenseiVoice(character: SenseiCharacter) {
               setIsSpeaking(false);
               show("closed");
             }
-          }
+          },
+          cloudVoiceParam
         ).then((playback) => {
           if (id === runId.current && playback) {
             activeAudioPlayback.current = playback;
-          } else if (id === runId.current && !playback && synth) {
+          } else if (id === runId.current && !playback && synth && hasJa) {
             run();
           }
         }).catch(() => {
-          if (id === runId.current && synth) run();
+          if (id === runId.current && synth && hasJa) run();
         });
         return;
       }
@@ -297,10 +313,30 @@ export function useSenseiVoice(character: SenseiCharacter) {
             c.start = performance.now() - w * c.ms;
           };
           u.onend = () => id === runId.current && endChunk(i);
-          u.onerror = () => {
+          u.onerror = (e) => {
             if (id !== runId.current) return;
-            stopLoop();
-            if (i === sentences.length - 1) setIsSpeaking(false);
+            if (e.error !== "canceled" && e.error !== "interrupted") {
+              // Fallback to Cloud TTS WebAudio
+              const cloudVoiceParam = speechVoiceURI.startsWith("cloud:") ? speechVoiceURI.slice("cloud:".length) : undefined;
+              playSenseiAudio(
+                s,
+                ch.gender,
+                () => { if (id === runId.current) setIsSpeaking(true); },
+                (v) => { if (id === runId.current) show(v); },
+                () => {
+                  if (id === runId.current) {
+                    setIsSpeaking(false);
+                    show("closed");
+                  }
+                },
+                cloudVoiceParam
+              ).then((p) => {
+                if (id === runId.current && p) activeAudioPlayback.current = p;
+              });
+            } else {
+              stopLoop();
+              if (i === sentences.length - 1) setIsSpeaking(false);
+            }
           };
           synth.speak(u);
         });
@@ -314,7 +350,7 @@ export function useSenseiVoice(character: SenseiCharacter) {
       if (wasBusy) window.setTimeout(run, 60);
       else run();
     },
-    [cancel, show, stopLoop]
+    [cancel, show, stopLoop, raw]
   );
 
   // Đổi nhân vật hoặc rời trang: dừng ngay, tránh giọng cũ đọc tiếp.
@@ -338,6 +374,7 @@ export function useSenseiVoice(character: SenseiCharacter) {
     speak,
     cancel,
     isSpeaking,
+    hasJapaneseVoice,
     viseme,
     voices,
     activeVoice: picked.voice

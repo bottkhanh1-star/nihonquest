@@ -13,6 +13,7 @@ import {
   getLocalizedRadicalInfo,
 } from "@/lib/kanjiLocalization";
 import { Icon, Modal } from "@/components/ui";
+import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 
 function getPositionFilters(lang: NativeLanguage): Array<{
   value: "ALL" | RadicalPosition;
@@ -54,6 +55,7 @@ interface RadicalsViewProps {
 
 export function RadicalsView({ onSelectKanjiFromExample }: RadicalsViewProps) {
   const { nativeLanguage } = useNativeLanguage();
+  const { speak, stopSpeaking, speakingText } = useSoundAndTheme();
   const [viewMode, setViewMode] = useState<"MATRIX" | "CARDS" | "TABLE">("MATRIX");
   const [selectedStrokes, setSelectedStrokes] = useState<number | "ALL">("ALL");
   const [selectedPos, setSelectedPos] = useState<"ALL" | RadicalPosition>("ALL");
@@ -68,17 +70,13 @@ export function RadicalsView({ onSelectKanjiFromExample }: RadicalsViewProps) {
   );
   const translations = useBatchTranslation(visibleEnglishTexts, nativeLanguage, "en");
 
-  // Pronounce Japanese name
+  // Pronounce Japanese name with multi-tier fallback & immediate toggle
   const speakJaName = (name: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(name);
-      u.lang = "ja-JP";
-      u.rate = 0.9;
-      window.speechSynthesis.speak(u);
-    } catch {
-      // fallback
+    if (!name) return;
+    if (speakingText === name) {
+      stopSpeaking();
+    } else {
+      speak(name);
     }
   };
 
