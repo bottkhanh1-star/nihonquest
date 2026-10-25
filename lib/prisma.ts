@@ -27,11 +27,13 @@ function createPrismaClient(): PrismaClientType {
   }
 
   try {
+    const isServerless = process.env.NODE_ENV === "production" || process.env.NETLIFY === "true";
     const pool = new Pool({
       connectionString,
       ssl: { rejectUnauthorized: false },
-      max: 10,
-      idleTimeoutMillis: 30000,
+      // In serverless, keep pool small (2 connections per lambda) to prevent pool exhaustion
+      max: isServerless ? 2 : 5,
+      idleTimeoutMillis: 10000,
       connectionTimeoutMillis: 10000,
     });
 
