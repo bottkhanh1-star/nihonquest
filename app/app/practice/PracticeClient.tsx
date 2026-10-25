@@ -10,7 +10,7 @@ import {
   type CurriculumTrackId,
   type LessonCurriculumMetadata,
 } from "@/lib/curriculum-tracks";
-import { useNativeLanguage } from "@/components/LanguageContext";
+import { useNativeLanguage, getLocalizedQuote } from "@/components/LanguageContext";
 import {
   LocalizedLessonTitle,
   LocalizedLessonDesc,
@@ -307,8 +307,12 @@ export function PracticeClient({
           {/* ── Linh vật Anime khích lệ học tập ── */}
           <MascotCheerBanner
             kind="shiba"
-            tag="Đồng hành cùng bạn"
-            quote="千里の道も一歩から — Đường vạn dặm bắt đầu từ một bước chân. Kiên trì mỗi ngày để sớm chinh phục JLPT nhé!"
+            tag={t("mascotCheerTag")}
+            quote={`千里の道も一歩から — ${getLocalizedQuote(
+              "千里の道も一歩から",
+              "Hành trình ngàn dặm bắt đầu từ một bước chân. Kiên trì mỗi ngày để sớm chinh phục JLPT nhé!",
+              nativeLanguage
+            )}`}
             author="NihonQuest Sensei"
           />
 

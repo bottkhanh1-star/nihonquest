@@ -1839,8 +1839,12 @@ export function VocabKanjiClient({
       {/* ── Linh vật Anime khích lệ tra cứu & học từ vựng ── */}
       <MascotCheerBanner
         kind="kitsune"
-        tag={`Kho Từ Vựng & Kanji JLPT ${currentLearningLevel}`}
-        quote="一期一会 (Ichigo Ichie) — Mỗi từ vựng là một cơ duyên gặp gỡ. Hãy kiên trì tích lũy từng từ mỗi ngày nhé!"
+        tag={`${t ? t("navVocab") : "Từ vựng"} · JLPT ${currentLearningLevel}`}
+        quote={`一期一会 — ${getLocalizedQuote(
+          "一期一会",
+          "Mỗi từ vựng là một cơ duyên gặp gỡ. Hãy kiên trì tích lũy từng từ mỗi ngày nhé!",
+          nativeLanguage
+        )}`}
         author="Kitsune Sensei"
       />
 

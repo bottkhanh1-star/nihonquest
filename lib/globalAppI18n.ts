@@ -785,3 +785,4 @@ export const GLOBAL_APP_I18N: Record<NativeLanguage, Record<string, string>> = {
     menuNavAria: "Menu de navegação",
   },
 };
+
