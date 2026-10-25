@@ -1,11 +1,29 @@
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
-function createPrismaClient(): PrismaClient {
+function getPrismaClientConstructor(): any {
+  // On Windows, Smart App Control / WDAC blocks query_engine-windows.dll.node and query-engine-windows.exe.
+  // We use the WASM-based engine on Windows to prevent `spawn UNKNOWN` crashes.
+  // On Linux / Netlify / Vercel, native engines run without WDAC restrictions.
+  if (process.platform === "win32") {
+    try {
+      const { PrismaClient } = require("@prisma/client/wasm");
+      return PrismaClient;
+    } catch {
+      const { PrismaClient } = require("@prisma/client");
+      return PrismaClient;
+    }
+  }
+  const { PrismaClient } = require("@prisma/client");
+  return PrismaClient;
+}
+
+function createPrismaClient(): PrismaClientType {
+  const ClientConstructor = getPrismaClientConstructor();
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
-    return new PrismaClient();
+    return new ClientConstructor();
   }
 
   const pool = new Pool({
@@ -21,12 +39,10 @@ function createPrismaClient(): PrismaClient {
   });
 
   const adapter = new PrismaPg(pool);
-  // Cast PrismaClient constructor to accept adapter in TypeScript
-  const ClientConstructor = PrismaClient as unknown as new (options?: { adapter?: any }) => PrismaClient;
   return new ClientConstructor({ adapter });
 }
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClientType };
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 

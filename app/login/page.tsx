@@ -41,7 +41,7 @@ function AuthErrorNotice() {
   if (code === "OAuthSignin") {
     message = "Đăng nhập Google thất bại (Chưa thiết lập GOOGLE_CLIENT_ID / NEXTAUTH_URL hoặc bị từ chối).";
   } else if (code === "OAuthCallback" || code === "Callback") {
-    message = "Không thể xác thực tài khoản. Cơ sở dữ liệu (Neon Database) đã vượt quá quota lưu trữ/tính toán (Mã lỗi 53000) hoặc bị ngắt kết nối. Vui lòng kiểm tra Neon Console hoặc cập nhật DATABASE_URL trong .env.";
+    message = "Không thể xác thực tài khoản. Cơ sở dữ liệu bị gián đoạn hoặc ngắt kết nối. Vui lòng kiểm tra DATABASE_URL trong .env.";
   }
 
   return (
