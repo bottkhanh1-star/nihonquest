@@ -13,6 +13,10 @@ import { NotificationDropdown } from "./NotificationDropdown";
 import { UserAvatar } from "./UserAvatar";
 import { guessVoiceGender, voiceGenderLabel } from "@/lib/voiceGender";
 import { Icon, IconButton, type IconName } from "./ui";
+import { useGlobalCall } from "./social/GlobalCallContext";
+import { getSocialTranslation } from "@/lib/socialI18n";
+import { useSeason, getLocalizedSeasonName } from "./SeasonContext";
+import { QuickSettingsDrawer } from "./QuickSettingsDrawer";
 
 interface NavItem {
   href: string;
@@ -30,12 +34,10 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/app", label: "Tổng quan", labelKey: "navOverview", icon: "dashboard", short: "Tổng quan", shortKey: "navOverview" },
   { href: "/app/path", label: "Lộ trình", labelKey: "navPath", glyph: "道", short: "Lộ trình", shortKey: "navPath" },
   { href: "/app/practice", label: "Bài học", labelKey: "navLessons", icon: "book", short: "Bài học", shortKey: "navLessons" },
   { href: "/app/review", label: "Ôn tập", labelKey: "navReview", icon: "cards", short: "Ôn tập", shortKey: "navReview" },
   { href: "/app/vocabulary", label: "Từ vựng", labelKey: "navVocab", glyph: "あ", short: "Từ vựng", shortKey: "navVocab" },
-  { href: "/app/grammar", label: "Ngữ pháp", labelKey: "navGrammar", glyph: "文", short: "Ngữ pháp", shortKey: "navGrammar" },
 ];
 
 const MORE_GROUPS: { title: string; titleKey?: string; items: NavItem[] }[] = [
@@ -43,6 +45,7 @@ const MORE_GROUPS: { title: string; titleKey?: string; items: NavItem[] }[] = [
     title: "Luyện tập & Kiểm tra",
     titleKey: "groupPractice",
     items: [
+      { href: "/app/grammar", label: "Ngữ pháp tiếng Nhật", labelKey: "navGrammar", glyph: "文", short: "Ngữ pháp" },
       { href: "/app/test", label: "Kiểm tra năng lực (4 kỹ năng)", labelKey: "navTest", glyph: "★", short: "Kiểm tra" },
       { href: "/app/learn", label: "Bảng chữ cái Kana & Tổng quan", labelKey: "navKana", glyph: "学", short: "Kana" },
       { href: "/app/sensei", label: "Hội thoại AI Sensei", labelKey: "navSensei", glyph: "話", short: "Sensei" },
@@ -52,6 +55,8 @@ const MORE_GROUPS: { title: string; titleKey?: string; items: NavItem[] }[] = [
     title: "Tiến độ & Cộng đồng",
     titleKey: "groupProgress",
     items: [
+      { href: "/app/community", label: "Cộng đồng & New Feed", labelKey: "navCommunity", glyph: "友", short: "Cộng đồng" },
+      { href: "/app/messages", label: "Nhắn tin & Bạn bè", labelKey: "navMessages", glyph: "💬", short: "Nhắn tin" },
       { href: "/app/analytics", label: "Đánh giá tiến bộ (Chu trình 8 bước)", labelKey: "navAnalytics", glyph: "進", short: "Tiến bộ" },
       { href: "/app/stats", label: "Thống kê học tập", labelKey: "navStats", glyph: "計", short: "Thống kê" },
       { href: "/app/leaderboard", label: "Bảng xếp hạng", labelKey: "navLeaderboard", glyph: "杯", short: "BXH" },
@@ -133,6 +138,8 @@ export function AppNav({
 }) {
   const { progress } = useUserProgress();
   const { nativeLanguage, setNativeLanguage, t } = useNativeLanguage();
+  const s = getSocialTranslation(nativeLanguage);
+  const { unreadMessagesCount } = useGlobalCall();
   const effectiveName = progress?.displayName || userName;
   const effectiveAvatar = progress?.avatar || avatar || userImage;
   const effectiveLevel = progress?.level ?? userLevel;
@@ -166,6 +173,8 @@ export function AppNav({
       setPreviewSpeakingURI(null);
     }
   }, [speakingText]);
+  const { config: seasonConfig, isAuto, resolvedSeason } = useSeason();
+  const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -220,9 +229,27 @@ export function AppNav({
   const linkActive =
     "bg-slate-50 font-bold text-slate-900 shadow-sm ring-1 ring-slate-200/80 [&_svg]:text-red-600 [&_.jp-text]:text-red-600 dark:bg-sumi-800 dark:text-white dark:ring-slate-700";
 
-  const getItemLabel = (item: NavItem) => (item.labelKey ? t(item.labelKey) : item.label);
-  const getItemShort = (item: NavItem) => (item.shortKey ? t(item.shortKey) : (item.labelKey ? t(item.labelKey) : item.short));
-  const getGroupTitle = (group: { title: string; titleKey?: string }) => (group.titleKey ? t(group.titleKey) : group.title);
+  const getItemLabel = (item: NavItem) => {
+    if (!item.labelKey) return item.label;
+    const val = t(item.labelKey);
+    return !val || val === item.labelKey ? item.label : val;
+  };
+  const getItemShort = (item: NavItem) => {
+    if (item.shortKey) {
+      const val = t(item.shortKey);
+      if (val && val !== item.shortKey) return val;
+    }
+    if (item.labelKey) {
+      const val = t(item.labelKey);
+      if (val && val !== item.labelKey) return val;
+    }
+    return item.short;
+  };
+  const getGroupTitle = (group: { title: string; titleKey?: string }) => {
+    if (!group.titleKey) return group.title;
+    const val = t(group.titleKey);
+    return !val || val === group.titleKey ? group.title : val;
+  };
 
   return (
     <>
@@ -310,8 +337,40 @@ export function AppNav({
           </nav>
 
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
-            {/* Tốc độ đọc + âm thanh */}
-            <div className="relative" ref={speedRef}>
+            {/* Seasonal Badge Pill (Desktop, Tablet & Wide Mobile) */}
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                setQuickSettingsOpen(true);
+              }}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-black transition active:scale-95 hover:opacity-90 max-[420px]:hidden shadow-xs whitespace-nowrap"
+              style={{
+                borderColor: `${seasonConfig.colorHex}50`,
+                backgroundColor: `${seasonConfig.colorHex}15`,
+                color: seasonConfig.colorHex,
+              }}
+              title={`${t("seasonTheme")}: ${getLocalizedSeasonName(resolvedSeason, nativeLanguage)} · ${t("quickSettings")}`}
+            >
+              <span>{seasonConfig.emoji}</span>
+              <span className="font-extrabold">{getLocalizedSeasonName(resolvedSeason, nativeLanguage)}</span>
+            </button>
+
+            {/* Mobile Quick Settings Button (Hidden on sm:) */}
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                setQuickSettingsOpen(true);
+              }}
+              className="sm:hidden inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 dark:border-sumi-700 bg-white dark:bg-sumi-900 text-slate-700 dark:text-slate-200 shadow-xs active:scale-95"
+              aria-label={t("quickSettings")}
+            >
+              <span className="text-sm">⚙️</span>
+            </button>
+
+            {/* Tốc độ đọc + âm thanh (Desktop & Tablet) */}
+            <div className="relative hidden sm:block" ref={speedRef}>
               <button
                 type="button"
                 onClick={() => {
@@ -344,14 +403,14 @@ export function AppNav({
                           stopSpeaking();
                         }}
                         className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-white px-3 py-2 text-xs font-black shadow-sm animate-pulse hover:bg-red-700 transition"
-                        title="Dừng âm thanh đang phát ngay lập tức"
+                        title={t("ttsStopBtn")}
                       >
                         <span>⏹️</span>
-                        <span>Dừng âm thanh đang phát</span>
+                        <span>{t("ttsStopBtn")}</span>
                       </button>
                     )}
                     <div>
-                      <p className="mb-2 text-xs font-bold text-slate-600 dark:text-slate-300">Tốc độ đọc</p>
+                      <p className="mb-2 text-xs font-bold text-slate-600 dark:text-slate-300">{t("ttsSpeedTitle")}</p>
                       <div className="flex flex-wrap gap-1.5">
                         {SPEECH_RATES.map((rate) => (
                           <button
@@ -442,8 +501,8 @@ export function AppNav({
               )}
             </div>
 
-            {/* Native Language Dropdown Selector */}
-            <div className="relative" ref={langRef} suppressHydrationWarning>
+            {/* Native Language Dropdown Selector (Desktop & Tablet) */}
+            <div className="relative hidden sm:block" ref={langRef} suppressHydrationWarning>
               <button
                 type="button"
                 suppressHydrationWarning
@@ -501,7 +560,7 @@ export function AppNav({
 
             <IconButton
               label={resolvedTheme === "dark" ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối"}
-              className="h-10 w-10 sm:h-10 sm:w-10"
+              className="hidden sm:inline-flex h-10 w-10"
               onClick={() => {
                 playClick();
                 toggleTheme();
@@ -511,6 +570,21 @@ export function AppNav({
             </IconButton>
 
             <NotificationDropdown />
+
+            {/* Mobile User Avatar Trigger (Opens Navigation Drawer) */}
+            <div className="sm:hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setMobileOpen(true);
+                }}
+                className="flex items-center rounded-full p-0.5 active:scale-95 focus-visible:outline-none"
+                aria-label="Hồ sơ & Menu"
+              >
+                <Avatar name={effectiveName} image={effectiveAvatar} />
+              </button>
+            </div>
 
             {/* Unified Account & Settings Popover (Desktop & Tablet) */}
             <div className="relative hidden sm:block" ref={accountRef}>
@@ -589,44 +663,111 @@ export function AppNav({
               )}
             </div>
 
-            <IconButton label="Mở menu" className="h-10 w-10 sm:h-10 sm:w-10 xl:hidden" onClick={() => setMobileOpen(true)}>
+            <IconButton label="Mở menu" className="hidden sm:inline-flex xl:hidden h-10 w-10" onClick={() => setMobileOpen(true)}>
               <Icon name="menu" className="h-5 w-5" />
             </IconButton>
           </div>
         </div>
       </header>
 
-      {/* Tab bar đáy màn hình — chỉ dưới xl. Đây là điều hướng chính trên điện thoại:
-          nằm trong tầm ngón cái thay vì nấp sau nút menu. */}
+      {/* Quick Settings Drawer for Mobile & Tablet */}
+      <QuickSettingsDrawer
+        open={quickSettingsOpen}
+        onClose={() => setQuickSettingsOpen(false)}
+        onOpenVoiceModal={() => setVoiceModalOpen(true)}
+      />
+
+      {/* Tab bar đáy màn hình — chỉ dưới xl. 5 vị trí công thái học ngón cái chuẩn Mobile App */}
       <nav
         aria-label="Điều hướng nhanh"
         className="nq-tabbar fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl select-none touch-manipulation dark:border-slate-800 dark:bg-sumi-900/95 xl:hidden"
       >
-        <ul className="mx-auto grid max-w-lg grid-cols-6">
-          {NAV_ITEMS.map((item) => {
-            const on = active(item.href, item.matchPrefixes);
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  onClick={playClick}
-                  aria-current={on ? "page" : undefined}
-                  className={`flex min-h-[56px] min-w-0 flex-col items-center justify-center gap-1 px-0.5 py-1.5 text-[10px] font-bold transition active:scale-95 touch-manipulation ${
-                    on ? "text-red-600 dark:text-red-400" : "text-slate-500 dark:text-slate-400"
-                  }`}
-                >
-                  <span
-                    className={`grid h-7 w-9 shrink-0 place-items-center rounded-full transition ${
-                      on ? "bg-red-50 dark:bg-red-950/50" : ""
-                    }`}
-                  >
-                    <NavGlyph item={item} />
-                  </span>
-                  <span className="min-w-0 max-w-full truncate leading-none">{getItemShort(item)}</span>
-                </Link>
-              </li>
-            );
-          })}
+        <ul className="mx-auto grid max-w-lg grid-cols-5">
+          <li>
+            <Link
+              href="/app"
+              onClick={playClick}
+              aria-current={active("/app") ? "page" : undefined}
+              className={`flex min-h-[56px] min-w-0 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[10.5px] font-bold transition active:scale-95 touch-manipulation ${
+                active("/app") ? "text-red-600 dark:text-red-400 font-black" : "text-slate-500 dark:text-slate-400"
+              }`}
+            >
+              <span className={`grid h-7 w-10 shrink-0 place-items-center rounded-full transition ${active("/app") ? "bg-red-50 dark:bg-red-950/50" : ""}`}>
+                <Icon name="dashboard" className="h-[18px] w-[18px]" />
+              </span>
+              <span className="truncate leading-none">{t("navOverview")}</span>
+            </Link>
+          </li>
+
+          <li>
+            <Link
+              href="/app/practice"
+              onClick={playClick}
+              aria-current={active("/app/practice") ? "page" : undefined}
+              className={`flex min-h-[56px] min-w-0 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[10.5px] font-bold transition active:scale-95 touch-manipulation ${
+                active("/app/practice") ? "text-red-600 dark:text-red-400 font-black" : "text-slate-500 dark:text-slate-400"
+              }`}
+            >
+              <span className={`grid h-7 w-10 shrink-0 place-items-center rounded-full transition ${active("/app/practice") ? "bg-red-50 dark:bg-red-950/50" : ""}`}>
+                <Icon name="book" className="h-[18px] w-[18px]" />
+              </span>
+              <span className="truncate leading-none">{t("navLessons")}</span>
+            </Link>
+          </li>
+
+          <li>
+            <Link
+              href="/app/review"
+              onClick={playClick}
+              aria-current={active("/app/review") ? "page" : undefined}
+              className={`flex min-h-[56px] min-w-0 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[10.5px] font-bold transition active:scale-95 touch-manipulation ${
+                active("/app/review") ? "text-red-600 dark:text-red-400 font-black" : "text-slate-500 dark:text-slate-400"
+              }`}
+            >
+              <span className={`grid h-7 w-10 shrink-0 place-items-center rounded-full transition ${active("/app/review") ? "bg-red-50 dark:bg-red-950/50" : ""}`}>
+                <Icon name="cards" className="h-[18px] w-[18px]" />
+              </span>
+              <span className="truncate leading-none">{t("navReview")}</span>
+            </Link>
+          </li>
+
+          <li>
+            <Link
+              href="/app/community"
+              onClick={playClick}
+              aria-current={active("/app/community") ? "page" : undefined}
+              className={`relative flex min-h-[56px] min-w-0 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[10.5px] font-bold transition active:scale-95 touch-manipulation ${
+                active("/app/community") ? "text-red-600 dark:text-red-400 font-black" : "text-slate-500 dark:text-slate-400"
+              }`}
+            >
+              <span className={`relative grid h-7 w-10 shrink-0 place-items-center rounded-full transition ${active("/app/community") ? "bg-red-50 dark:bg-red-950/50" : ""}`}>
+                <span className="text-[16px]">🌸</span>
+                {unreadMessagesCount > 0 && (
+                  <span className="absolute top-0 right-1 flex h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white dark:ring-sumi-900 animate-pulse" />
+                )}
+              </span>
+              <span className="truncate leading-none">{t("navCommunity")}</span>
+            </Link>
+          </li>
+
+          <li>
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                setMobileOpen(true);
+              }}
+              className="relative flex min-h-[56px] w-full min-w-0 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[10.5px] font-bold text-slate-500 transition active:scale-95 touch-manipulation dark:text-slate-400"
+            >
+              <span className="relative grid h-7 w-10 shrink-0 place-items-center rounded-full">
+                <Icon name="menu" className="h-[18px] w-[18px]" />
+                {unreadMessagesCount > 0 && (
+                  <span className="absolute top-0.5 right-1.5 flex h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white dark:ring-sumi-900" />
+                )}
+              </span>
+              <span className="truncate leading-none">{t("navExplore")}</span>
+            </button>
+          </li>
         </ul>
       </nav>
 
@@ -642,12 +783,12 @@ export function AppNav({
             className="ml-auto flex h-full w-[min(88vw,360px)] flex-col overflow-y-auto overscroll-contain bg-white p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-2xl outline-none dark:bg-sumi-900"
             role="dialog"
             aria-modal="true"
-            aria-label="Menu điều hướng"
+            aria-label={t("menuNavAria")}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
               <NihonQuestLogo size="sm" />
-              <IconButton label="Đóng menu" className="h-11 w-11 shrink-0" onClick={() => setMobileOpen(false)}>
+              <IconButton label={t("closeMenu")} className="h-11 w-11 shrink-0" onClick={() => setMobileOpen(false)}>
                 <Icon name="close" className="h-4 w-4" />
               </IconButton>
             </div>
@@ -697,6 +838,41 @@ export function AppNav({
                 >
                   <span>⚙️</span>
                   <span>{t("settings") || "Cài đặt"}</span>
+                </Link>
+                <Link
+                  href="/app/community"
+                  onClick={() => {
+                    playClick();
+                    setMobileOpen(false);
+                  }}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                    pathname.startsWith("/app/community")
+                      ? "border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
+                      : "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-sumi-900 dark:text-slate-200"
+                  }`}
+                >
+                  <span>🌸</span>
+                  <span>{s.communityTitle.split(" ")[0]}</span>
+                </Link>
+                <Link
+                  href="/app/messages"
+                  onClick={() => {
+                    playClick();
+                    setMobileOpen(false);
+                  }}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                    pathname.startsWith("/app/messages")
+                      ? "border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
+                      : "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-sumi-900 dark:text-slate-200"
+                  }`}
+                >
+                  <span>💬</span>
+                  <span>{s.tabChats}</span>
+                  {unreadMessagesCount > 0 && (
+                    <span className="ml-1 rounded-full bg-red-600 px-1.5 text-[9px] text-white">
+                      {unreadMessagesCount}
+                    </span>
+                  )}
                 </Link>
                 <div className="col-span-2 mt-1">
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">

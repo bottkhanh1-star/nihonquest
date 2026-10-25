@@ -98,12 +98,8 @@ export function LeaderboardClient({
                   <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500 text-white shadow-xs shrink-0">
                     {t("lbDirectRival") || "⚔️ DIRECT RIVAL"}
                   </span>
-                  <Badge variant="slate" className="shrink-0 text-[9px] uppercase tracking-wider">
-                    {t("lbSimulatedBot") || "🤖 AI Rival"}
-                  </Badge>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-bold truncate">
-                    {directRival.bot.displayName || (t("lbSimulatedBot") || "AI Rival")}
-                  </span>
+                 
+                 
                 </div>
                 <h4 className="font-black text-sm sm:text-base text-slate-900 dark:text-white leading-snug">
                   {getLocalizedRivalMessage()}
@@ -212,11 +208,7 @@ export function LeaderboardClient({
                     <Badge variant={rank <= 3 ? "amber" : "slate"} className="text-[9px] sm:text-[10px] shrink-0 py-0 px-1.5 sm:px-2">
                       {tier.name}
                     </Badge>
-                    {user.isBot && (
-                      <Badge variant="slate" className="text-[9px] sm:text-[10px] shrink-0 py-0 px-1.5 sm:px-2">
-                        {t("lbSimulatedBot") || "🤖 AI Rival"}
-                      </Badge>
-                    )}
+                  
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 text-[11px] sm:text-xs text-slate-500 font-medium flex-wrap">
                     <span>🎯 Lv.{user.level}</span>

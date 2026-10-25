@@ -1,6 +1,6 @@
-import { PrismaClient } from "@prisma/client";
-import { PrismaNeon } from "@prisma/adapter-neon";
-import { Pool } from "@neondatabase/serverless";
+import { PrismaClient } from "@prisma/client/wasm";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
 function createPrismaClient(): PrismaClient {
   const connectionString = process.env.DATABASE_URL;
@@ -8,23 +8,22 @@ function createPrismaClient(): PrismaClient {
     return new PrismaClient();
   }
 
-  // Use Neon serverless WebSocket adapter only in Edge runtime (where native TCP sockets are not available)
-  if (process.env.NEXT_RUNTIME === "edge" && connectionString.includes("neon.tech")) {
-    try {
-      const pool = new Pool({ connectionString });
-      pool.on("error", (err) => {
-        console.warn("[Neon Database Pool Notice]:", (err as Error)?.message || err);
-      });
-      const adapter = new PrismaNeon(pool);
-      return new PrismaClient({ adapter });
-    } catch (e) {
-      console.warn("[Prisma Neon Adapter Fallback]:", e);
-      return new PrismaClient();
-    }
-  }
+  const pool = new Pool({
+    connectionString,
+    ssl: { rejectUnauthorized: false },
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  });
 
-  // In Node.js (Next.js server & CLI scripts), native Prisma Rust Engine connects via robust TCP (zero WebSocket dropouts)
-  return new PrismaClient();
+  pool.on("error", (err) => {
+    console.warn("[Database Pool Warning]:", (err as Error)?.message || err);
+  });
+
+  const adapter = new PrismaPg(pool);
+  // Cast PrismaClient constructor to accept adapter in TypeScript
+  const ClientConstructor = PrismaClient as unknown as new (options?: { adapter?: any }) => PrismaClient;
+  return new ClientConstructor({ adapter });
 }
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };

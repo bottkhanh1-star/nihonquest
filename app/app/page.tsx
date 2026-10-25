@@ -489,11 +489,11 @@ export default async function AppHome() {
                         </span>
                         <b>
                           <span className="nqd-rank-name">{label || <LocalizedText k="learner" fallback="Học viên" />}</span>
-                          {row.isBot && (
+                          {/*row.isBot && (
                             <span className="ml-1.5 inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-sumi-800 dark:text-slate-400">
                               🤖 AI
                             </span>
-                          )}
+                          )*/} 
                         </b>
                         <em>{row.xp.toLocaleString("vi-VN")} XP</em>
                       </div>

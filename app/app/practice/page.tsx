@@ -175,14 +175,14 @@ export default async function PracticePage() {
               {nextLesson && (
                 <Link
                   href={`/app/practice/${nextLesson.slug}`}
-                  className="inline-flex min-h-12 items-center gap-2 rounded-full bg-red-600 px-7 text-sm font-black text-white shadow-lg shadow-red-600/30 transition hover:bg-red-700 active:scale-[0.98]"
+                  className="inline-flex min-h-12 items-center gap-2 rounded-full bg-red-600 px-7 text-sm font-black text-white nq-btn-3d active:scale-[0.98]"
                 >
                   <LocalizedText k="btnStartNow" fallback="Bắt đầu học ngay" /> <span aria-hidden>→</span>
                 </Link>
               )}
               <a
                 href="#courses"
-                className="inline-flex min-h-12 items-center gap-3 rounded-full border border-slate-200 bg-white/90 py-1 pl-1 pr-5 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-sumi-900/80 dark:text-slate-200"
+                className="inline-flex min-h-12 items-center gap-3 rounded-full border border-slate-200 bg-white/95 py-1 pl-1 pr-5 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-sumi-900/90 dark:text-slate-200 nq-btn-3d-white"
               >
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-xs dark:bg-sumi-800">▶</span>
                 <LocalizedText k="btnViewLessonList" fallback="Xem danh sách bài học" />

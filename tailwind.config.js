@@ -73,6 +73,18 @@ module.exports = {
           "0%": { opacity: "0", transform: "translateY(6px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        springUp: {
+          "0%": { opacity: "0", transform: "translateY(12px) scale(0.96)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        slideInUp: {
+          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        slideInDown: {
+          "0%": { opacity: "0", transform: "translateY(-10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
         indeterminate: {
           "0%": { transform: "translateX(-100%) scaleX(0.2)" },
           "50%": { transform: "translateX(0%) scaleX(0.7)" },
@@ -80,15 +92,35 @@ module.exports = {
         },
         pop: {
           "0%": { transform: "scale(0.96)" },
-          "50%": { transform: "scale(1.02)" },
+          "50%": { transform: "scale(1.04)" },
           "100%": { transform: "scale(1)" },
+        },
+        heartPop: {
+          "0%": { transform: "scale(1)" },
+          "40%": { transform: "scale(1.35)" },
+          "70%": { transform: "scale(0.9)" },
+          "100%": { transform: "scale(1)" },
+        },
+        pulseGlow: {
+          "0%, 100%": { opacity: "1", transform: "scale(1)" },
+          "50%": { opacity: "0.85", transform: "scale(1.03)" },
+        },
+        waveEqualizer: {
+          "0%, 100%": { height: "6px" },
+          "50%": { height: "24px" },
         },
       },
       animation: {
         float: "float 3s ease-in-out infinite",
         fadeIn: "fadeIn 0.28s ease-out forwards",
+        springUp: "springUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        slideInUp: "slideInUp 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        slideInDown: "slideInDown 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         indeterminate: "indeterminate 1.8s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite",
         pop: "pop 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        heartPop: "heartPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards",
+        pulseGlow: "pulseGlow 2s ease-in-out infinite",
+        waveEqualizer: "waveEqualizer 1.2s ease-in-out infinite",
       },
     },
   },

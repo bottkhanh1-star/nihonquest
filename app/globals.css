@@ -60,15 +60,51 @@ html {
      tránh xung đột với transform/opacity animation. */
   html,
   body,
-  body *:not([class*="animate-"]):not([class*="motion-"]):not([class*="nq-floating"]) {
+  body *:not([class*="animate-"]):not([class*="motion-"]):not([class*="nq-floating"]):not(video):not(audio):not(canvas):not(svg):not(path) {
     transition-property: background-color, color, border-color, box-shadow, fill, stroke, outline-color;
-    transition-duration: 300ms;
+    transition-duration: 200ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* Nút / interactive element: transition nhanh hơn để không bị lag khi hover */
   button, a, input, select, textarea, [role="button"] {
     transition-duration: 150ms;
+  }
+
+  /* Smooth UI animation utilities */
+  .animate-spring-up {
+    animation: springUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .animate-slide-in-up {
+    animation: slideInUp 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .animate-slide-in-down {
+    animation: slideInDown 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .animate-heart-pop {
+    animation: heartPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  }
+  .animate-pulse-glow {
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
+  /* Premium Motion & Micro-interaction Classes */
+  .nq-card-lift {
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .nq-card-lift:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 30px -4px rgba(0, 0, 0, 0.1), 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  .nq-interactive-btn {
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease-out;
+  }
+  .nq-interactive-btn:hover {
+    transform: scale(1.04);
+  }
+  .nq-interactive-btn:active {
+    transform: scale(0.95);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -304,5 +340,99 @@ html {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* ========================================================
+   3D TACTILE & ISOMETRIC UI UTILITIES
+   ======================================================== */
+
+/* Duolingo / Nintendo style 3D pushable button with physical depth */
+.nq-btn-3d {
+  position: relative;
+  transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 0 #b91c1c, 0 8px 18px -2px rgba(220, 38, 38, 0.35);
+}
+.nq-btn-3d:hover {
+  transform: translateY(-1.5px);
+  box-shadow: 0 5.5px 0 #b91c1c, 0 12px 22px -2px rgba(220, 38, 38, 0.42);
+}
+.nq-btn-3d:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #b91c1c, 0 4px 8px -1px rgba(220, 38, 38, 0.25);
+}
+
+/* Secondary 3D outline button */
+.nq-btn-3d-white {
+  position: relative;
+  transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 3px 0 #cbd5e1, 0 6px 14px -2px rgba(15, 23, 42, 0.08);
+}
+.dark .nq-btn-3d-white {
+  box-shadow: 0 3px 0 #334155, 0 6px 14px -2px rgba(0, 0, 0, 0.4);
+}
+.nq-btn-3d-white:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4.5px 0 #cbd5e1, 0 10px 18px -2px rgba(15, 23, 42, 0.12);
+}
+.dark .nq-btn-3d-white:hover {
+  box-shadow: 0 4.5px 0 #334155, 0 10px 18px -2px rgba(0, 0, 0, 0.5);
+}
+.nq-btn-3d-white:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #cbd5e1, 0 3px 6px -1px rgba(15, 23, 42, 0.06);
+}
+.dark .nq-btn-3d-white:active {
+  box-shadow: 0 1px 0 #334155, 0 3px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+/* 3D Elevated Card with light rim & soft ambient depth */
+.nq-card-3d {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 10px 24px -4px rgba(15, 23, 42, 0.07), 0 3px 8px -2px rgba(15, 23, 42, 0.03), inset 0 1.5px 0 rgba(255, 255, 255, 0.85);
+  border-bottom-width: 3px;
+}
+.nq-card-3d:hover {
+  transform: translateY(-3px) scale(1.004);
+  box-shadow: 0 18px 36px -6px rgba(15, 23, 42, 0.12), 0 8px 16px -3px rgba(15, 23, 42, 0.06), inset 0 1.5px 0 rgba(255, 255, 255, 0.95);
+}
+.dark .nq-card-3d {
+  box-shadow: 0 10px 24px -4px rgba(0, 0, 0, 0.5), 0 3px 8px -2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.dark .nq-card-3d:hover {
+  box-shadow: 0 18px 36px -6px rgba(0, 0, 0, 0.7), 0 8px 16px -3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* 3D Anime Mascot Figurine floating animation */
+.nq-mascot-3d {
+  animation: mascot3dFloat 3.8s ease-in-out infinite;
+  filter: drop-shadow(0 12px 14px rgba(0, 0, 0, 0.14)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.08));
+}
+.dark .nq-mascot-3d {
+  filter: drop-shadow(0 12px 16px rgba(0, 0, 0, 0.6)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4));
+}
+
+@keyframes mascot3dFloat {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(1.2deg);
+  }
+}
+
+/* Ground shadow pulse underneath mascot */
+.nq-mascot-ground-shadow {
+  animation: mascotShadowPulse 3.8s ease-in-out infinite;
+}
+
+@keyframes mascotShadowPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.22;
+  }
+  50% {
+    transform: scale(0.82);
+    opacity: 0.12;
+  }
 }
 

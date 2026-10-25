@@ -1,5 +1,6 @@
 generator client {
   provider        = "prisma-client-js"
+  engineType      = "binary"
   previewFeatures = ["driverAdapters"]
 }
 
@@ -82,6 +83,15 @@ model User {
   collection          UserCollection[]
   roomItems           UserRoomItems[]
   aiConversations     AiConversation[]
+  friendshipsInitiated Friendship[]         @relation("UserFriendships")
+  friendshipsReceived  Friendship[]         @relation("FriendOfUser")
+  sentMessages        DirectMessage[]      @relation("SentMessages")
+  receivedMessages    DirectMessage[]      @relation("ReceivedMessages")
+  outgoingCalls       CallSession[]        @relation("OutgoingCalls")
+  incomingCalls       CallSession[]        @relation("IncomingCalls")
+  communityPosts      CommunityPost[]
+  communityComments   CommunityComment[]
+  communityLikes      CommunityLike[]
 }
 
 model Profile {
@@ -610,4 +620,120 @@ model AssessmentExamQuestion {
   exam                   AssessmentExam @relation(fields: [examId], references: [id], onDelete: Cascade)
   @@unique([examId, questionKey])
   @@index([examId, order])
+}
+
+
+// ============================================================================
+// SOCIAL, MESSAGING, CALLING & COMMUNITY FEED
+// ============================================================================
+
+model Friendship {
+  id        String   @id @default(cuid())
+  userId    String
+  friendId  String
+  status    String   @default("PENDING") // "PENDING", "ACCEPTED", "DECLINED", "BLOCKED"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation("UserFriendships", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("FriendOfUser", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@index([userId])
+  @@index([friendId])
+  @@index([status])
+}
+
+model DirectMessage {
+  id             String   @id @default(cuid())
+  senderId       String
+  receiverId     String
+  content        String   @db.Text
+  attachmentType String?  // "NONE", "IMAGE", "VOCAB", "GRAMMAR"
+  attachmentData String?  @db.Text
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  sender         User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver       User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId])
+  @@index([receiverId, isRead])
+  @@index([createdAt])
+}
+
+model CallSession {
+  id          String    @id @default(cuid())
+  callerId    String
+  receiverId  String
+  status      String    @default("RINGING") // "RINGING", "ACCEPTED", "REJECTED", "ENDED", "MISSED"
+  callType    String    @default("AUDIO")   // "AUDIO", "VIDEO"
+  offerSdp    String?   @db.Text
+  answerSdp   String?   @db.Text
+  callerIce   String?   @db.Text            // JSON array of candidates
+  receiverIce String?   @db.Text            // JSON array of candidates
+  durationSec Int       @default(0)
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  caller      User      @relation("OutgoingCalls", fields: [callerId], references: [id], onDelete: Cascade)
+  receiver    User      @relation("IncomingCalls", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([callerId])
+  @@index([receiverId])
+  @@index([status])
+}
+
+model CommunityPost {
+  id            String             @id @default(cuid())
+  authorId      String
+  title         String?
+  content       String             @db.Text
+  category      String             @default("GENERAL") // "GENERAL", "QUESTION", "GRAMMAR", "VOCAB", "TIPS"
+  levelTag      String             @default("ALL")     // "ALL", "N5", "N4", "N3", "N2", "N1"
+  imageUrl      String?
+  likesCount    Int                @default(0)
+  commentsCount Int                @default(0)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  author        User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments      CommunityComment[]
+  likes         CommunityLike[]
+
+  @@index([authorId])
+  @@index([category])
+  @@index([levelTag])
+  @@index([createdAt])
+}
+
+model CommunityComment {
+  id        String        @id @default(cuid())
+  postId    String
+  authorId  String
+  content   String        @db.Text
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([authorId])
+}
+
+model CommunityLike {
+  id        String        @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime      @default(now())
+
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
 }

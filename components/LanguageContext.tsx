@@ -10,6 +10,7 @@ export {
 import { type NativeLanguage, type NativeLanguageInfo, SUPPORTED_LANGUAGES } from "@/lib/languages";
 import { PAGE_I18N_DICTIONARY } from "@/lib/pageI18nDictionary";
 import { DASHBOARD_PAGES_I18N } from "@/lib/dashboardPagesI18n";
+import { GLOBAL_APP_I18N } from "@/lib/globalAppI18n";
 
 export const DAILY_QUOTE_TRANSLATIONS: Record<string, Partial<Record<NativeLanguage, string>>> = {
   "七転び八起き": {
@@ -204,7 +205,9 @@ const DICTIONARY: Record<NativeLanguage, Record<string, string>> = {
     navJourney: "Hành trình Nhật Bản",
     navSurvival: "Thực chiến tiếng Nhật",
     navYokaiDash: "Mini-game Yōkai Dash",
-        navOverview: "Tổng quan",
+    navCommunity: "Cộng đồng & Bảng tin",
+    navMessages: "Nhắn tin & Bạn bè",
+    navOverview: "Tổng quan",
     navExplore: "Khám phá",
     journeyMap: "Bản đồ →",
     citiesExplored: "thành phố đã khám phá",
@@ -355,7 +358,9 @@ groupPractice: "Luyện tập & Kiểm tra",
     navJourney: "Japan Journey",
     navSurvival: "Survival Japanese",
     navYokaiDash: "Yōkai Dash Game",
-        navOverview: "Overview",
+    navCommunity: "Community & Feed",
+    navMessages: "Messages & Friends",
+    navOverview: "Overview",
     navExplore: "Explore",
     journeyMap: "Map →",
     citiesExplored: "cities explored",
@@ -7325,12 +7330,16 @@ export function LanguageProvider({
   const t = useCallback(
     (key: string, params?: Record<string, string | number>): string => {
       let raw: string =
+        GLOBAL_APP_I18N[nativeLanguage]?.[key] ||
         DASHBOARD_PAGES_I18N[nativeLanguage]?.[key] ||
-        PAGE_I18N_DICTIONARY[nativeLanguage]?.[key] || EXTENDED_DICTIONARY[nativeLanguage]?.[key] ||
+        PAGE_I18N_DICTIONARY[nativeLanguage]?.[key] ||
+        EXTENDED_DICTIONARY[nativeLanguage]?.[key] ||
         DICTIONARY[nativeLanguage]?.[key] ||
+        GLOBAL_APP_I18N.en?.[key] ||
         (nativeLanguage !== "vi"
           ? DASHBOARD_PAGES_I18N.en?.[key] || PAGE_I18N_DICTIONARY.en?.[key] || EXTENDED_DICTIONARY.en?.[key] || DICTIONARY.en?.[key]
           : "") ||
+        GLOBAL_APP_I18N.vi?.[key] ||
         (nativeLanguage === "vi"
           ? DASHBOARD_PAGES_I18N.vi?.[key] || PAGE_I18N_DICTIONARY.vi?.[key] || EXTENDED_DICTIONARY.vi?.[key] || DICTIONARY.vi?.[key]
           : "") ||

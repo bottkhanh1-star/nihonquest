@@ -19,6 +19,7 @@ import { LocalizedVocabMeaning } from "@/lib/vocabLocalization";
 import { JouyouKanjiView } from "./JouyouKanjiView";
 import { RadicalsView } from "./RadicalsView";
 import { RadicalGuideView } from "./RadicalGuideView";
+import { MascotCheerBanner } from "@/components/mascots/AnimeMascot";
 
 /* ============================== TYPES ============================== */
 
@@ -1131,7 +1132,7 @@ function GridCard({
 }) {
   const { nativeLanguage } = useNativeLanguage();
   return (
-    <Card hover className="flex flex-col justify-between !rounded-2xl">
+    <Card hover className="flex flex-col justify-between !rounded-2xl nq-card-3d">
       <div>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -1835,6 +1836,14 @@ export function VocabKanjiClient({
 
   return (
     <div id="dictionary" className="space-y-4">
+      {/* ── Linh vật Anime khích lệ tra cứu & học từ vựng ── */}
+      <MascotCheerBanner
+        kind="kitsune"
+        tag={`Kho Từ Vựng & Kanji JLPT ${currentLearningLevel}`}
+        quote="一期一会 (Ichigo Ichie) — Mỗi từ vựng là một cơ duyên gặp gỡ. Hãy kiên trì tích lũy từng từ mỗi ngày nhé!"
+        author="Kitsune Sensei"
+      />
+
       <div className="rounded-3xl border border-slate-200/80 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-sumi-900 sm:p-5">
         {/* ---------- Tabs + Navigation (Mobile Horizontal Scrollable) ---------- */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none sm:flex-wrap">
@@ -1948,12 +1957,37 @@ export function VocabKanjiClient({
 
               {/* Quick filters row */}
               <div className="flex items-center gap-2">
+                {/* Focused JLPT Level Selector (Locked to learner's level by default) */}
                 <div
                   title={`Cấp độ học hiện tại: JLPT ${currentLearningLevel}`}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-2xl border border-red-200/90 bg-red-50/90 px-3.5 text-xs font-black text-red-700 shadow-xs dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+                  className="inline-flex h-10 items-center gap-1.5 rounded-2xl border border-red-200/90 bg-red-50/90 px-3 text-xs font-black text-red-700 shadow-xs dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
                 >
-                  <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                  <span>JLPT {currentLearningLevel}</span>
+                  <span className="h-2 w-2 rounded-full bg-red-500" />
+                  <span>JLPT</span>
+                  <select
+                    value={levelFilter}
+                    onChange={(e) => {
+                      playClick();
+                      setLevelFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    aria-label="Cấp độ JLPT"
+                    className="bg-transparent font-black text-red-700 dark:text-red-300 outline-none cursor-pointer"
+                  >
+                    <option value={currentLearningLevel} className="dark:bg-sumi-900 text-slate-800 dark:text-slate-100">
+                      {currentLearningLevel} {t ? t("learningBadge") : "(Đang học)"}
+                    </option>
+                    {(["N5", "N4", "N3"] as const)
+                      .filter((l) => l !== currentLearningLevel)
+                      .map((l) => (
+                        <option key={l} value={l} className="dark:bg-sumi-900 text-slate-800 dark:text-slate-100">
+                          {l} {t ? t("exploreBadgeAlt") : "(Khám phá)"}
+                        </option>
+                      ))}
+                    <option value="ALL" className="dark:bg-sumi-900 text-slate-800 dark:text-slate-100">
+                      {t ? t("allFilter") : "Tất cả"}
+                    </option>
+                  </select>
                 </div>
 
                 {tab === "VOCAB" && (
@@ -2083,7 +2117,7 @@ export function VocabKanjiClient({
                       }}
                       className="rounded-xl px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
                     >
-                      ✕ Đặt lại tất cả bộ lọc
+                      ✕ {t ? t("resetAllFilters") : "Đặt lại tất cả bộ lọc"}
                     </button>
                   </div>
                 )}
