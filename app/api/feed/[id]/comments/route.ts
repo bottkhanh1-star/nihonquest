@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/web-push";
 
 export const dynamic = "force-dynamic";
 
@@ -87,10 +88,28 @@ export async function POST(
     });
 
     // Update commentsCount on post
-    await prisma.communityPost.update({
+    const updatedPost = await prisma.communityPost.update({
       where: { id: postId },
       data: { commentsCount: { increment: 1 } },
+      select: { authorId: true, title: true },
     });
+
+    // Send Web Push notification to post author (if not self)
+    if (updatedPost.authorId && updatedPost.authorId !== userId) {
+      (async () => {
+        try {
+          const commenterName = comment.author.profile?.displayName || comment.author.name || "Học viên";
+          await sendPushToUser(updatedPost.authorId, {
+            title: `💬 Bình luận mới trên bài viết của bạn`,
+            body: `${commenterName}: "${content.trim().slice(0, 75)}"`,
+            url: `/app/community`,
+            tag: `comment-${postId}`,
+          });
+        } catch (pushErr) {
+          console.warn("[/api/feed/comments] Push error:", pushErr);
+        }
+      })();
+    }
 
     return NextResponse.json({
       comment: {

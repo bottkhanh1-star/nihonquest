@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/web-push";
 
 export const dynamic = "force-dynamic";
 
@@ -136,6 +137,25 @@ export async function POST(request: Request) {
           },
         },
       });
+
+      // Send Web Push notification to receiver (even if offline / tab closed)
+      (async () => {
+        try {
+          const caller = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true, profile: { select: { displayName: true } } },
+          });
+          const callerName = caller?.profile?.displayName || caller?.name || "Bạn bè";
+          await sendPushToUser(receiverId, {
+            title: `📞 Cuộc gọi đến từ ${callerName}`,
+            body: `Đang gọi ${callType === "VIDEO" ? "video" : "thoại"} cho bạn. Nhấn để tham gia ngay!`,
+            url: `/app/messages?friendId=${userId}&callId=${call.id}`,
+            tag: `call-${call.id}`,
+          });
+        } catch (pushErr) {
+          console.warn("[/api/calls] Push error:", pushErr);
+        }
+      })();
 
       return NextResponse.json({ call });
     }

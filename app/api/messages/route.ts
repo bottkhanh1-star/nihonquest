@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/web-push";
 
 export const dynamic = "force-dynamic";
 
@@ -203,6 +204,25 @@ export async function POST(request: Request) {
         attachmentData: attachmentData ? (typeof attachmentData === "string" ? attachmentData : JSON.stringify(attachmentData)) : null,
       },
     });
+
+    // Send Web Push notification to receiver (even if offline / tab closed)
+    (async () => {
+      try {
+        const sender = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true, profile: { select: { displayName: true } } },
+        });
+        const senderName = sender?.profile?.displayName || sender?.name || "Bạn bè";
+        await sendPushToUser(receiverId, {
+          title: `💬 Tin nhắn từ ${senderName}`,
+          body: finalContent.length > 80 ? finalContent.slice(0, 77) + "..." : finalContent,
+          url: `/app/messages?friendId=${userId}`,
+          tag: `msg-${userId}`,
+        });
+      } catch (pushErr) {
+        console.warn("[/api/messages] Push error:", pushErr);
+      }
+    })();
 
     return NextResponse.json({ message });
   } catch (err: unknown) {

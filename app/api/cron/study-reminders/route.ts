@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendStudyReminderEmail } from "@/lib/email";
+import { sendPushToUser } from "@/lib/web-push";
 
 // Cache to prevent duplicate emails to the same user within 20 hours
 const sentRemindersCache = new Map<string, number>();
@@ -106,6 +107,27 @@ async function handleCronReminders(req: NextRequest) {
         currentLevel: u.learningLevel || "N5",
         nativeLanguage: "vi",
       });
+
+      // Send Web Push notification to user device (even when tab is closed)
+      try {
+        if (!studiedToday && u.currentStreak > 0) {
+          await sendPushToUser(u.id, {
+            title: `🔥 Chuỗi ${u.currentStreak} ngày sắp bị gián đoạn!`,
+            body: "Bạn chưa học hôm nay. Hoàn thành 1 bài để giữ ngọn lửa streak nhé!",
+            url: "/app/learn",
+            tag: "streak-reminder",
+          });
+        } else if (dueCards > 0) {
+          await sendPushToUser(u.id, {
+            title: "📚 Đã đến giờ ôn tập từ vựng!",
+            body: `Bạn có ${dueCards} thẻ SRS đang chờ ôn tập để củng cố trí nhớ.`,
+            url: "/app/review",
+            tag: "srs-review",
+          });
+        }
+      } catch (pushErr) {
+        console.warn("[Cron] Web push error:", pushErr);
+      }
 
       if (res.success) {
         sentRemindersCache.set(u.id, now.getTime());

@@ -7,6 +7,7 @@ import { useNativeLanguage } from "@/components/LanguageContext";
 import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 import { useGlobalCall } from "@/components/social/GlobalCallContext";
 import { Icon, IconButton } from "@/components/ui";
+import { registerPushSubscription, sendServerTestPush } from "@/lib/push-client";
 
 interface NotificationItem {
   id: string;
@@ -29,10 +30,13 @@ export function NotificationDropdown() {
   const [devicePermission, setDevicePermission] = useState<NotificationPermission | "unsupported">("default");
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
-  // Check initial notification permission on mount
+  // Check initial notification permission on mount and sync background push
   useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window) {
       setDevicePermission(Notification.permission);
+      if (Notification.permission === "granted" && "serviceWorker" in navigator) {
+        registerPushSubscription().catch(() => {});
+      }
     } else {
       setDevicePermission("unsupported");
     }
@@ -43,53 +47,79 @@ export function NotificationDropdown() {
     if (typeof window === "undefined" || !("Notification" in window)) {
       showToast({
         title: nativeLanguage === "vi" ? "Trình duyệt không hỗ trợ" : "Unsupported Browser",
-        description: nativeLanguage === "vi" ? "Trình duyệt này không hỗ trợ Web Notification." : "This browser does not support notifications.",
+        description: nativeLanguage === "vi" ? "Trình duyệt này không hỗ trợ Web Push Notification." : "This browser does not support Web Push notifications.",
         type: "info",
       });
       return;
     }
 
     try {
-      const perm = await Notification.requestPermission();
-      setDevicePermission(perm);
-      if (perm === "granted") {
-        new Notification("Nihon Quest 🌸", {
-          body: nativeLanguage === "vi" 
-            ? "Đã bật thông báo thiết bị thành công! Bạn sẽ nhận được nhắc nhở học tập và tin nhắn." 
-            : "Device notifications enabled! You will receive daily study reminders and messages.",
-          icon: "/icon.png",
-        });
+      showToast({
+        title: nativeLanguage === "vi" ? "Đang kích hoạt thông báo... ⏳" : "Activating Notifications... ⏳",
+        description: nativeLanguage === "vi" ? "Đang đăng ký dịch vụ thông báo đẩy nền với trình duyệt..." : "Registering background push service...",
+        type: "info",
+      });
+
+      const result = await registerPushSubscription();
+      if (result.success) {
+        setDevicePermission("granted");
         showToast({
           title: nativeLanguage === "vi" ? "Đã bật thông báo thiết bị! 🔔" : "Notifications Enabled! 🔔",
-          description: nativeLanguage === "vi" ? "Hệ thống sẽ gửi thông báo trực tiếp tới màn hình thiết bị của bạn." : "System will now send direct notifications to your device.",
+          description: nativeLanguage === "vi" 
+            ? "Bạn sẽ nhận được nhắc học, cảnh báo đứt chuỗi, tin nhắn và cuộc gọi ngay cả khi tắt web!" 
+            : "You will receive streak alerts, messages and calls even when the website is closed!",
           type: "info",
         });
-      } else if (perm === "denied") {
-        showToast({
-          title: nativeLanguage === "vi" ? "Chưa cấp quyền" : "Permission Denied",
-          description: nativeLanguage === "vi" ? "Bạn đã từ chối quyền. Hãy mở cài đặt trình duyệt để cho phép." : "Notification permission was blocked in browser settings.",
-          type: "info",
-        });
+
+        // Trigger real server push notification test
+        await sendServerTestPush();
+      } else {
+        if (Notification.permission === "denied") {
+          setDevicePermission("denied");
+          showToast({
+            title: nativeLanguage === "vi" ? "Chưa cấp quyền" : "Permission Denied",
+            description: nativeLanguage === "vi" 
+              ? "Bạn đã chặn thông báo. Bấm vào icon ổ khóa trên thanh địa chỉ URL để bật lại." 
+              : "Notification was blocked. Please enable it in browser URL site settings.",
+            type: "info",
+          });
+        } else {
+          setDevicePermission(Notification.permission);
+        }
       }
     } catch (err) {
       console.warn("Failed to request notification permission:", err);
     }
   }, [nativeLanguage, playClick, showToast]);
 
-  const testDeviceNotification = useCallback(() => {
+  const testDeviceNotification = useCallback(async () => {
     playClick();
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-      new Notification("Nihon Quest 🌸 — Lời nhắc học tập", {
-        body: nativeLanguage === "vi" 
-          ? "Đã đến giờ ôn tập! Hãy duy trì chuỗi Streak và hoàn thành 10 phút tiếng Nhật hôm nay nhé! 🔥" 
-          : "Time to practice! Keep your streak alive and complete 10 mins of Japanese today! 🔥",
-        icon: "/icon.png",
-      });
       showToast({
-        title: nativeLanguage === "vi" ? "Đã gửi thông báo thử nghiệm! 🚀" : "Test Notification Sent! 🚀",
-        description: nativeLanguage === "vi" ? "Kiểm tra thanh thông báo hệ điều hành / thiết bị của bạn." : "Check your operating system notification banner.",
+        title: nativeLanguage === "vi" ? "Đang gửi chuông thử nghiệm... 🚀" : "Sending Test Push... 🚀",
+        description: nativeLanguage === "vi" ? "Hệ thống đang phát thông báo đẩy từ server tới thiết bị của bạn." : "Server is dispatching push to your device.",
         type: "info",
       });
+
+      try {
+        const res = await sendServerTestPush();
+        if (!res.success) {
+          // Fallback to local notification if server push had an issue
+          new Notification("Nihon Quest 🌸 — Lời nhắc học tập", {
+            body: nativeLanguage === "vi" 
+              ? "Đã đến giờ ôn tập! Hãy duy trì chuỗi Streak và hoàn thành 10 phút tiếng Nhật hôm nay nhé! 🔥" 
+              : "Time to practice! Keep your streak alive and complete 10 mins of Japanese today! 🔥",
+            icon: "/icon.png",
+          });
+        }
+      } catch {
+        new Notification("Nihon Quest 🌸 — Lời nhắc học tập", {
+          body: nativeLanguage === "vi" 
+            ? "Đã đến giờ ôn tập! Hãy duy trì chuỗi Streak và hoàn thành 10 phút tiếng Nhật hôm nay nhé! 🔥" 
+            : "Time to practice! Keep your streak alive and complete 10 mins of Japanese today! 🔥",
+          icon: "/icon.png",
+        });
+      }
     }
   }, [nativeLanguage, playClick, showToast]);
 
@@ -275,7 +305,9 @@ export function NotificationDropdown() {
             ) : (
               <div className="flex items-center justify-between gap-2">
                 <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium">
-                  {nativeLanguage === "vi" ? "Nhận thông báo bài học & tin nhắn về máy tính / điện thoại:" : "Get study reminders & messages on this device:"}
+                  {nativeLanguage === "vi" 
+                    ? "Nhận nhắc học, giữ chuỗi, tin nhắn & cuộc gọi (kể cả khi tắt web):" 
+                    : "Receive streak alerts, messages & calls (even when website is closed):"}
                 </div>
                 <button
                   type="button"

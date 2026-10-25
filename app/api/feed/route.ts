@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendPushToMultipleUsers } from "@/lib/web-push";
 
 export const dynamic = "force-dynamic";
 
@@ -132,6 +133,31 @@ export async function POST(request: Request) {
         },
       },
     });
+
+    // Notify accepted friends of new community post
+    (async () => {
+      try {
+        const friendships = await prisma.friendship.findMany({
+          where: {
+            status: "ACCEPTED",
+            OR: [{ userId }, { friendId: userId }],
+          },
+        });
+        const friendIds = friendships.map((f) => (f.userId === userId ? f.friendId : f.userId));
+        if (friendIds.length > 0) {
+          const authorName = post.author.profile?.displayName || post.author.name || "Bạn của bạn";
+          const snippet = post.title ? `${post.title}: ${post.content.slice(0, 50)}` : post.content.slice(0, 70);
+          await sendPushToMultipleUsers(friendIds, {
+            title: `🌟 ${authorName} vừa đăng bài mới`,
+            body: snippet,
+            url: `/app/community`,
+            tag: `feed-${post.id}`,
+          });
+        }
+      } catch (err) {
+        console.warn("[/api/feed] Friend push error:", err);
+      }
+    })();
 
     return NextResponse.json({
       post: {
