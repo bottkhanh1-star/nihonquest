@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { AppNav } from "@/components/AppNav";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -200,7 +200,7 @@ function FileAttachmentBubble({
   );
 }
 
-export default function MessagesAndFriendsPage() {
+function MessagesAndFriendsContent() {
   const { nativeLanguage } = useNativeLanguage();
   const s = getSocialTranslation(nativeLanguage);
   const quickPhrases = QUICK_KAIWA_TEMPLATES[nativeLanguage] || QUICK_KAIWA_TEMPLATES.vi;
@@ -1334,5 +1334,22 @@ export default function MessagesAndFriendsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MessagesAndFriendsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 dark:bg-sumi-900 flex items-center justify-center text-slate-500 dark:text-slate-400">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-red-500 border-t-transparent" />
+            <span className="text-sm">Đang tải...</span>
+          </div>
+        </div>
+      }
+    >
+      <MessagesAndFriendsContent />
+    </Suspense>
   );
 }
