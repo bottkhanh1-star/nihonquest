@@ -18,19 +18,25 @@ export default async function LearningPathPage() {
   const uid = (session?.user as { id?: string } | undefined)?.id;
   if (!uid) redirect("/login");
 
-  const user = await prisma.user.findUnique({
-    where: { id: uid },
-    select: {
-      learningLevel: true,
-      learningGoal: true,
-      dailyGoalMinutes: true,
-      levelChoice: true,
-      focusSkill: true,
-      learningStyle: true,
-      onboardingCompleted: true,
-      profile: { select: { displayName: true } },
-    },
-  });
+  let user: any = null;
+  try {
+    user = await prisma.user.findUnique({
+      where: { id: uid },
+      select: {
+        learningLevel: true,
+        learningGoal: true,
+        dailyGoalMinutes: true,
+        levelChoice: true,
+        focusSkill: true,
+        learningStyle: true,
+        onboardingCompleted: true,
+        profile: { select: { displayName: true } },
+      },
+    });
+  } catch (err) {
+    console.warn("[LearningPathPage] User fetch warning:", err);
+  }
+
   if (!user) redirect("/login");
   if (!user.onboardingCompleted) redirect("/onboarding");
 
@@ -50,31 +56,45 @@ export default async function LearningPathPage() {
     .filter((s, i, arr) => arr.indexOf(s) === i);
 
   const now = new Date();
-  const [lessons, dueSrsCount, weakSrsCount, userLowLessons] = await Promise.all([
-    prisma.lesson.findMany({
-      where: { slug: { in: slugs }, isPublished: true },
-      select: {
-        slug: true,
-        title: true,
-        description: true,
-        xpReward: true,
-        progress: { where: { userId: uid } },
-        _count: { select: { exercises: true } },
-      },
-    }),
-    prisma.reviewItem.count({
-      where: { userId: uid, dueAt: { lte: now } },
-    }),
-    prisma.reviewItem.count({
-      where: { userId: uid, repetitions: 0 },
-    }),
-    prisma.userLessonProgress.findMany({
-      where: { userId: uid, score: { lt: 75 } },
-      include: { lesson: { select: { slug: true, title: true } } },
-      orderBy: { score: "asc" },
-      take: 3,
-    }),
-  ]);
+  let lessons: any[] = [];
+  let dueSrsCount = 0;
+  let weakSrsCount = 0;
+  let userLowLessons: any[] = [];
+
+  try {
+    const res = await Promise.all([
+      prisma.lesson.findMany({
+        where: { slug: { in: slugs }, isPublished: true },
+        select: {
+          slug: true,
+          title: true,
+          description: true,
+          xpReward: true,
+          progress: { where: { userId: uid } },
+          _count: { select: { exercises: true } },
+        },
+      }),
+      prisma.reviewItem.count({
+        where: { userId: uid, dueAt: { lte: now } },
+      }),
+      prisma.reviewItem.count({
+        where: { userId: uid, repetitions: 0 },
+      }),
+      prisma.userLessonProgress.findMany({
+        where: { userId: uid, score: { lt: 75 } },
+        include: { lesson: { select: { slug: true, title: true } } },
+        orderBy: { score: "asc" },
+        take: 3,
+      }),
+    ]);
+    lessons = res[0] || [];
+    dueSrsCount = res[1] || 0;
+    weakSrsCount = res[2] || 0;
+    userLowLessons = res[3] || [];
+  } catch (err) {
+    console.warn("[LearningPathPage] Non-critical enrichment query warning:", err);
+  }
+
   const bySlug = new Map(lessons.map((l) => [l.slug, l]));
 
   let activeLessonSeen = false;

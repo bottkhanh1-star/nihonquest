@@ -125,82 +125,82 @@ export default async function AppHome() {
   const uid = (session?.user as { id?: string } | undefined)?.id;
   if (!uid) redirect("/login");
 
-  const user = await prisma.user.findUnique({ where: { id: uid }, include: { profile: true } });
+  let user: any = null;
+  try {
+    user = await prisma.user.findUnique({ where: { id: uid }, include: { profile: true } });
+  } catch (err) {
+    console.warn("[AppHome] User query warning:", err);
+  }
   if (!user) redirect("/login");
   if (!user.onboardingCompleted) redirect("/onboarding");
 
   const level = calculateLevel(user.totalXP);
   const userLevel = resolveCanonicalUserLevel(user);
 
-  const allLessons = await prisma.lesson.findMany({
-    where: { isPublished: true, level: userLevel },
-    orderBy: { order: "asc" },
-    include: { progress: { where: { userId: uid } } },
-  });
-  const completed = allLessons.filter((l) => l.progress[0]?.status === "COMPLETED").length;
-  const currentLesson = allLessons.find((l) => l.progress[0]?.status !== "COMPLETED") || allLessons[0];
+  let allLessons: any[] = [];
+  let allJourneyLocations: any[] = [];
+  let dueReviewCount = 0;
+  let missions: any[] = [];
+  let users: any[] = [];
+  let weeklyXp = new Map<string, number>();
+
+  try {
+    const today = localDateKey(new Date(), user.timezone || "UTC");
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [lessonsRes, journeyRes, reviewsRes, missionsRes, txSumsRes, usersRes] = await Promise.all([
+      prisma.lesson.findMany({
+        where: { isPublished: true, level: userLevel },
+        orderBy: { order: "asc" },
+        include: { progress: { where: { userId: uid } } },
+      }),
+      prisma.journeyLocation.findMany({
+        orderBy: { order: "asc" },
+        include: { userProgress: { where: { userId: uid } } },
+      }),
+      prisma.reviewItem.count({
+        where: { userId: uid, dueAt: { lte: new Date() } },
+      }),
+      prisma.userDailyMission.findMany({
+        where: { userId: uid, date: today },
+        include: { mission: true },
+      }),
+      prisma.xpTransaction.groupBy({
+        by: ["userId"],
+        where: { createdAt: { gte: sevenDaysAgo } },
+        _sum: { amount: true },
+      }),
+      prisma.user.findMany({
+        select: {
+          id: true,
+          name: true,
+          image: true,
+          totalXP: true,
+          level: true,
+          currentStreak: true,
+          profile: { select: { displayName: true, avatar: true } },
+        },
+        orderBy: { totalXP: "desc" },
+        take: 50,
+      }),
+    ]);
+
+    allLessons = lessonsRes || [];
+    allJourneyLocations = journeyRes || [];
+    dueReviewCount = reviewsRes || 0;
+    missions = missionsRes || [];
+    txSumsRes.forEach((t) => weeklyXp.set(t.userId, t._sum.amount || 0));
+    users = usersRes || [];
+  } catch (err) {
+    console.warn("[AppHome] Parallel queries warning:", err);
+  }
+
+  const completed = allLessons.filter((l) => l.progress?.[0]?.status === "COMPLETED").length;
+  const currentLesson = allLessons.find((l) => l.progress?.[0]?.status !== "COMPLETED") || allLessons[0];
   const currentCurriculum = currentLesson ? getLessonCurriculumMetadata(currentLesson) : null;
   const lessonPercent = Math.round((completed / Math.max(1, allLessons.length)) * 100);
 
-  const allJourneyLocations = await prisma.journeyLocation.findMany({
-    orderBy: { order: "asc" },
-    include: { userProgress: { where: { userId: uid } } },
-  });
-
-  for (const loc of allJourneyLocations) {
-    const p = loc.userProgress[0];
-    if (p && p.progress >= 100 && p.status !== "COMPLETED") {
-      await prisma.userJourneyProgress.update({
-        where: { id: p.id },
-        data: { status: "COMPLETED", completedAt: p.completedAt || new Date() },
-      });
-      p.status = "COMPLETED";
-    }
-  }
   const journeyLocations = allJourneyLocations.slice(0, 5);
-
-  const dueReviewCount = await prisma.reviewItem.count({
-    where: { userId: uid, dueAt: { lte: new Date() } },
-  });
-
-  const today = localDateKey(new Date(), user.timezone || "UTC");
-  let missions = await prisma.userDailyMission.findMany({ where: { userId: uid, date: today }, include: { mission: true } });
-  if (!missions.length) {
-    const templates = await prisma.dailyMission.findMany();
-    for (const t of templates) {
-      await prisma.userDailyMission.upsert({
-        where: { userId_missionId_date: { userId: uid, missionId: t.id, date: today } },
-        update: {},
-        create: { userId: uid, missionId: t.id, date: today, targetCount: t.targetCount },
-      });
-    }
-    missions = await prisma.userDailyMission.findMany({ where: { userId: uid, date: today }, include: { mission: true } });
-  }
-
-  for (const m of missions) {
-    if (m.status !== "COMPLETED" && m.progress >= m.targetCount) {
-      await prisma.userDailyMission.update({
-        where: { id: m.id },
-        data: { status: "COMPLETED", completedAt: new Date() },
-      });
-      m.status = "COMPLETED";
-    }
-  }
-
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const txSums = await prisma.xpTransaction.groupBy({
-    by: ["userId"],
-    where: { createdAt: { gte: sevenDaysAgo } },
-    _sum: { amount: true },
-  });
-  const weeklyXp = new Map<string, number>();
-  txSums.forEach((t) => weeklyXp.set(t.userId, t._sum.amount || 0));
-
-  const users = await prisma.user.findMany({
-    select: { id: true, name: true, image: true, totalXP: true, level: true, currentStreak: true, profile: { select: { displayName: true, avatar: true } } },
-    orderBy: [{ totalXP: "desc" }, { currentStreak: "desc" }],
-    take: 20,
-  });
   const formatted = users.map((u) => ({
     id: u.id, name: u.name, totalXP: u.totalXP, level: u.level, currentStreak: u.currentStreak,
     displayName: u.profile?.displayName || u.name, avatar: u.profile?.avatar || u.image || null, weeklyXp: weeklyXp.get(u.id) || 0,

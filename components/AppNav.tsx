@@ -569,6 +569,37 @@ export function AppNav({
               <Icon name={resolvedTheme === "dark" ? "moon" : "sun"} className="h-[18px] w-[18px]" />
             </IconButton>
 
+            {/* Direct Desktop Chat / Messages Button */}
+            <Link
+              href="/app/messages"
+              onClick={playClick}
+              className={`relative hidden md:inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition hover:border-slate-300 active:scale-95 dark:border-slate-700 dark:bg-sumi-900 dark:text-slate-200 ${
+                active("/app/messages") ? "ring-2 ring-red-500 text-red-600 dark:text-red-400" : ""
+              }`}
+              title={t("navMessages") || "Nhắn tin & Bạn bè"}
+              aria-label={t("navMessages") || "Nhắn tin & Bạn bè"}
+            >
+              <span className="text-base">💬</span>
+              {unreadMessagesCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white ring-2 ring-white dark:ring-sumi-900 animate-pulse">
+                  {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
+                </span>
+              )}
+            </Link>
+
+            {/* Direct Desktop Community Button */}
+            <Link
+              href="/app/community"
+              onClick={playClick}
+              className={`relative hidden lg:inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition hover:border-slate-300 active:scale-95 dark:border-slate-700 dark:bg-sumi-900 dark:text-slate-200 ${
+                active("/app/community") ? "ring-2 ring-red-500 text-red-600 dark:text-red-400" : ""
+              }`}
+              title={t("navCommunity") || "Cộng đồng & New Feed"}
+              aria-label={t("navCommunity") || "Cộng đồng"}
+            >
+              <span className="text-base">👥</span>
+            </Link>
+
             <NotificationDropdown />
 
             {/* Mobile User Avatar Trigger (Opens Navigation Drawer) */}
@@ -637,6 +668,53 @@ export function AppNav({
                       <div className="min-w-0 flex-1">
                         <b className="block text-xs font-bold">{t("userProfile") || "Hồ sơ cá nhân"}</b>
                         <span className="block text-[11px] text-slate-400">{t("userProfileDesc") || "Ảnh đại diện, cấp độ & bảo mật"}</span>
+                      </div>
+                    </Link>
+
+                    {/* Messages & Chat inside Avatar Menu */}
+                    <Link
+                      href="/app/messages"
+                      onClick={() => {
+                        playClick();
+                        setAccountOpen(false);
+                      }}
+                      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                        pathname.startsWith("/app/messages")
+                          ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                          : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-sumi-800"
+                      }`}
+                    >
+                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-sm dark:bg-sumi-800">💬</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <b className="block text-xs font-bold">{t("navMessages") || "Nhắn tin & Bạn bè"}</b>
+                          {unreadMessagesCount > 0 && (
+                            <span className="rounded-full bg-red-600 text-white text-[10px] font-black px-1.5 py-0.5 animate-pulse">
+                              {unreadMessagesCount}
+                            </span>
+                          )}
+                        </div>
+                        <span className="block text-[11px] text-slate-400">Hộp thư, trò chuyện & kết bạn</span>
+                      </div>
+                    </Link>
+
+                    {/* Community inside Avatar Menu */}
+                    <Link
+                      href="/app/community"
+                      onClick={() => {
+                        playClick();
+                        setAccountOpen(false);
+                      }}
+                      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                        pathname.startsWith("/app/community")
+                          ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                          : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-sumi-800"
+                      }`}
+                    >
+                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-sm dark:bg-sumi-800">👥</span>
+                      <div className="min-w-0 flex-1">
+                        <b className="block text-xs font-bold">{t("navCommunity") || "Cộng đồng & New Feed"}</b>
+                        <span className="block text-[11px] text-slate-400">Giao lưu hỏi đáp, chia sẻ kinh nghiệm</span>
                       </div>
                     </Link>
 
