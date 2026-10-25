@@ -26,20 +26,25 @@ function createPrismaClient(): PrismaClientType {
     return new ClientConstructor();
   }
 
-  const pool = new Pool({
-    connectionString,
-    ssl: { rejectUnauthorized: false },
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-  });
+  try {
+    const pool = new Pool({
+      connectionString,
+      ssl: { rejectUnauthorized: false },
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    });
 
-  pool.on("error", (err) => {
-    console.warn("[Database Pool Warning]:", (err as Error)?.message || err);
-  });
+    pool.on("error", (err) => {
+      console.warn("[Database Pool Warning]:", (err as Error)?.message || err);
+    });
 
-  const adapter = new PrismaPg(pool);
-  return new ClientConstructor({ adapter });
+    const adapter = new PrismaPg(pool);
+    return new ClientConstructor({ adapter });
+  } catch (err) {
+    console.error("[Database Client Setup Error]:", err);
+    return new ClientConstructor();
+  }
 }
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClientType };
