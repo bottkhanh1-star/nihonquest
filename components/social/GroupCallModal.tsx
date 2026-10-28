@@ -426,11 +426,21 @@ export function GroupCallModal({
     }).catch(() => {});
   };
 
-  // 8. Copy Room Code
+  // 8. Copy Room Code & Invite Link
+  const [copiedLink, setCopiedLink] = useState(false);
+
   const copyRoomCode = () => {
     navigator.clipboard.writeText(roomCode);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const copyInviteLink = () => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://nihonquest.netlify.app";
+    const inviteUrl = `${origin}/app/study-rooms?room=${encodeURIComponent(roomCode)}`;
+    navigator.clipboard.writeText(inviteUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   // 9. Leave Room
@@ -481,6 +491,18 @@ export function GroupCallModal({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Copy Invite Link */}
+          <button
+            type="button"
+            onClick={copyInviteLink}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-xs font-bold text-slate-200 transition hover:bg-slate-700 hover:text-white"
+            title="Sao chép link phòng học gửi bạn bè (click là vào ngay)"
+          >
+            <span>🔗</span>
+            <span className="hidden sm:inline">{copiedLink ? "✓ Đã chép link" : "Sao chép Link mời"}</span>
+            <span className="sm:hidden">{copiedLink ? "✓ Đã chép" : "Link"}</span>
+          </button>
+
           {/* Room Code Pill & Copy */}
           <button
             type="button"
@@ -490,7 +512,7 @@ export function GroupCallModal({
           >
             <span>Mã:</span>
             <span className="font-mono text-amber-400">{roomCode}</span>
-            <span className="text-[10px] text-slate-400">{copiedCode ? "✓ Đã chép" : "📋"}</span>
+            <span className="text-[10px] text-slate-400">{copiedCode ? "✓" : "📋"}</span>
           </button>
 
           {/* Toggle Chat Drawer Button */}

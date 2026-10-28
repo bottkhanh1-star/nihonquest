@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { AppNav } from "@/components/AppNav";
 import { UserAvatar } from "@/components/UserAvatar";
 import { GroupCallModal, type GroupRoomData } from "@/components/social/GroupCallModal";
@@ -8,8 +9,14 @@ import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 
 const LEVEL_TABS = ["ALL", "N5", "N4", "N3", "N2", "N1"] as const;
 
-export default function StudyRoomsPage() {
+function StudyRoomsInner() {
   const { playClick, showToast } = useSoundAndTheme();
+  const searchParams = useSearchParams();
+  const urlRoomCode =
+    searchParams.get("room") ||
+    searchParams.get("roomCode") ||
+    searchParams.get("roomcode") ||
+    searchParams.get("code");
 
   const [rooms, setRooms] = useState<GroupRoomData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,11 +41,36 @@ export default function StudyRoomsPage() {
   const [newRoomPin, setNewRoomPin] = useState("");
   const [creating, setCreating] = useState(false);
   const [createdRoomNotice, setCreatedRoomNotice] = useState<GroupRoomData | null>(null);
-  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+  const [hasAutoLoadedUrlRoom, setHasAutoLoadedUrlRoom] = useState(false);
 
   // Join by code state
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [joiningCode, setJoiningCode] = useState(false);
+
+  const getRoomInviteUrl = (code: string) => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://nihonquest.netlify.app";
+    return `${origin}/app/study-rooms?room=${encodeURIComponent(code)}`;
+  };
+
+  const copyRoomInviteUrl = (code: string) => {
+    const url = getRoomInviteUrl(code);
+    navigator.clipboard.writeText(url);
+    setCopiedLinkId(code);
+    setTimeout(() => setCopiedLinkId(null), 2000);
+    showToast({
+      title: "Đã sao chép link mời! 🔗",
+      description: "Gửi link này cho bạn bè. Bạn bè bấm vào link sẽ được vào phòng ngay.",
+      type: "info",
+    });
+  };
+
+  const copyRoomCodeOnly = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCodeId(code);
+    setTimeout(() => setCopiedCodeId(null), 2000);
+  };
 
   // Fetch active rooms (rooms stay alive for 3 days)
   const fetchRooms = useCallback(async () => {
@@ -60,6 +92,33 @@ export default function StudyRoomsPage() {
     const timer = setInterval(fetchRooms, 4000);
     return () => clearInterval(timer);
   }, [fetchRooms]);
+
+  // Auto-lookup and open pre-join lobby when visiting with ?room=CODE or ?roomCode=CODE
+  useEffect(() => {
+    if (!urlRoomCode || hasAutoLoadedUrlRoom) return;
+    setHasAutoLoadedUrlRoom(true);
+
+    const cleanCode = urlRoomCode.trim().toUpperCase();
+    fetch(`/api/study-rooms/${cleanCode}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.room) {
+          openLobbyForRoom(data.room);
+          showToast({
+            title: "🔗 Đã nhận liên kết phòng học!",
+            description: `Vui lòng kiểm tra camera & micro trước khi vào "${data.room.name}"`,
+            type: "info",
+          });
+        } else {
+          showToast({
+            title: "Phòng học không tồn tại",
+            description: data.error || "Mã phòng không hợp lệ hoặc phòng đã hết hạn sau 3 ngày.",
+            type: "error",
+          });
+        }
+      })
+      .catch(() => {});
+  }, [urlRoomCode, hasAutoLoadedUrlRoom, showToast]);
 
   // Setup device preview when lobby room is active
   useEffect(() => {
@@ -481,18 +540,28 @@ export default function StudyRoomsPage() {
                         Hoạt động
                       </span>
 
-                      <button
-                        type="button"
-                        disabled={isFull}
-                        onClick={() => openLobbyForRoom(room)}
-                        className={`rounded-xl px-4 py-2 text-xs font-bold transition shadow-xs active:scale-95 ${
-                          isFull
-                            ? "bg-slate-800 text-slate-500 cursor-not-allowed"
-                            : "bg-red-600 text-white hover:bg-red-700"
-                        }`}
-                      >
-                        {isFull ? "Đã đầy" : "Kiểm tra & Vào phòng →"}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => copyRoomInviteUrl(room.code)}
+                          className="rounded-xl border border-slate-700 bg-slate-800/80 px-2.5 py-2 text-xs font-bold text-slate-300 hover:bg-slate-700 hover:text-white transition"
+                          title="Sao chép link mời phòng học"
+                        >
+                          {copiedLinkId === room.code ? "✓ Đã chép" : "🔗 Link"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isFull}
+                          onClick={() => openLobbyForRoom(room)}
+                          className={`rounded-xl px-4 py-2 text-xs font-bold transition shadow-xs active:scale-95 ${
+                            isFull
+                              ? "bg-slate-800 text-slate-500 cursor-not-allowed"
+                              : "bg-red-600 text-white hover:bg-red-700"
+                          }`}
+                        >
+                          {isFull ? "Đã đầy" : "Kiểm tra & Vào phòng →"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -604,9 +673,18 @@ export default function StudyRoomsPage() {
                 <h4 className="text-sm font-extrabold text-white truncate max-w-[200px]">
                   {lobbyRoom.name}
                 </h4>
-                <div className="text-[11px] text-slate-400">
-                  Mã: <b className="text-amber-400">{lobbyRoom.code}</b> •{" "}
-                  {(lobbyRoom.participants || []).length} người trong phòng
+                <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                  <span>Mã: <b className="text-amber-400">{lobbyRoom.code}</b></span>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={() => copyRoomInviteUrl(lobbyRoom.code)}
+                    className="text-xs font-bold text-red-400 hover:text-red-300 underline"
+                  >
+                    {copiedLinkId === lobbyRoom.code ? "✓ Đã chép link" : "🔗 Sao chép Link mời"}
+                  </button>
+                  <span>•</span>
+                  <span>{(lobbyRoom.participants || []).length} người</span>
                 </div>
               </div>
 
@@ -743,37 +821,50 @@ export default function StudyRoomsPage() {
               Phòng đã được mở và sẽ được giữ trống trong <b>3 ngày</b> tới để bạn và bạn bè có thể vào học bất cứ lúc nào.
             </p>
 
-            <div className="my-4 rounded-2xl bg-slate-900 p-3 border border-slate-800">
-              <span className="text-[11px] text-slate-400 block mb-1">Mã phòng của bạn:</span>
-              <span className="text-lg font-black font-mono text-amber-400 tracking-wider">
-                {createdRoomNotice.code}
-              </span>
+            <div className="my-4 rounded-2xl bg-slate-900 p-3.5 border border-slate-800 text-left">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-slate-400">Mã phòng:</span>
+                <span className="text-base font-black font-mono text-amber-400 tracking-wider">
+                  {createdRoomNotice.code}
+                </span>
+              </div>
+
+              <span className="text-[11px] font-bold text-slate-400 block mb-1">Link mời trực tiếp:</span>
+              <div className="truncate rounded-xl bg-slate-950 p-2 text-[11px] font-mono text-slate-300 border border-slate-800 select-all">
+                {getRoomInviteUrl(createdRoomNotice.code)}
+              </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(createdRoomNotice.code);
-                  setCopiedCode(true);
-                  setTimeout(() => setCopiedCode(false), 2000);
-                }}
-                className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-xs font-bold text-white hover:bg-slate-700 transition"
+                onClick={() => copyRoomInviteUrl(createdRoomNotice.code)}
+                className="w-full rounded-xl bg-red-600 py-2.5 text-xs font-extrabold text-white hover:bg-red-700 shadow-md transition"
               >
-                {copiedCode ? "✓ Đã sao chép mã" : "📋 Sao chép mã phòng"}
+                {copiedLinkId === createdRoomNotice.code ? "✓ Đã sao chép Link mời" : "🔗 Sao chép Link mời bạn bè"}
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  const target = createdRoomNotice;
-                  setCreatedRoomNotice(null);
-                  openLobbyForRoom(target);
-                }}
-                className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-red-700 transition"
-              >
-                Vào phòng
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => copyRoomCodeOnly(createdRoomNotice.code)}
+                  className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-700 hover:text-white transition"
+                >
+                  {copiedCodeId === createdRoomNotice.code ? "✓ Đã sao chép mã" : "📋 Sao chép mã"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = createdRoomNotice;
+                    setCreatedRoomNotice(null);
+                    openLobbyForRoom(target);
+                  }}
+                  className="flex-1 rounded-xl border border-emerald-600 bg-emerald-600/20 py-2.5 text-xs font-extrabold text-emerald-400 hover:bg-emerald-600/30 transition"
+                >
+                  Vào phòng ngay
+                </button>
+              </div>
             </div>
 
             <button
@@ -801,5 +892,19 @@ export default function StudyRoomsPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function StudyRoomsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#0f1419] flex items-center justify-center text-slate-400 text-sm font-bold">
+          Đang tải danh sách phòng học...
+        </div>
+      }
+    >
+      <StudyRoomsInner />
+    </Suspense>
   );
 }
