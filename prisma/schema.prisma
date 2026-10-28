@@ -93,6 +93,8 @@ model User {
   communityComments   CommunityComment[]
   communityLikes      CommunityLike[]
   pushSubscriptions   PushSubscription[]
+  hostedGroupRooms    GroupCallRoom[]        @relation("HostedRooms")
+  groupCallMemberships GroupCallParticipant[]
 }
 
 model Profile {
@@ -752,4 +754,59 @@ model PushSubscription {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+
+model GroupCallRoom {
+  id           String                 @id @default(cuid())
+  code         String                 @unique
+  name         String
+  levelTag     String                 @default("ALL") // "ALL", "N5", "N4", "N3", "N2", "N1"
+  hostId       String
+  isPrivate    Boolean                @default(false)
+  pinCode      String?
+  maxMembers   Int                    @default(6)
+  isActive     Boolean                @default(true)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  host         User                   @relation("HostedRooms", fields: [hostId], references: [id], onDelete: Cascade)
+  participants GroupCallParticipant[]
+  signals      GroupCallSignal[]
+
+  @@index([code])
+  @@index([isActive])
+}
+
+model GroupCallParticipant {
+  id              String        @id @default(cuid())
+  roomId          String
+  userId          String
+  peerId          String
+  isAudioMuted    Boolean       @default(false)
+  isVideoOff      Boolean       @default(false)
+  isScreenSharing Boolean       @default(false)
+  lastPingAt      DateTime      @default(now())
+  joinedAt        DateTime      @default(now())
+
+  room            GroupCallRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@index([lastPingAt])
+}
+
+model GroupCallSignal {
+  id         String        @id @default(cuid())
+  roomId     String
+  fromUserId String
+  toUserId   String        // target userId, or "ALL"
+  type       String        // "offer", "answer", "candidate", "chat", "member_state"
+  payload    String        @db.Text
+  createdAt  DateTime      @default(now())
+
+  room       GroupCallRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, toUserId, createdAt])
 }

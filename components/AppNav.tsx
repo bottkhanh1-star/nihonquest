@@ -55,6 +55,7 @@ const MORE_GROUPS: { title: string; titleKey?: string; items: NavItem[] }[] = [
     title: "Tiến độ & Cộng đồng",
     titleKey: "groupProgress",
     items: [
+      { href: "/app/study-rooms", label: "Phòng học Kaiwa nhóm (Call video)", labelKey: "navStudyRooms", glyph: "🎙️", short: "Call nhóm" },
       { href: "/app/community", label: "Cộng đồng & New Feed", labelKey: "navCommunity", glyph: "友", short: "Cộng đồng" },
       { href: "/app/messages", label: "Nhắn tin & Bạn bè", labelKey: "navMessages", glyph: "💬", short: "Nhắn tin" },
       { href: "/app/analytics", label: "Đánh giá tiến bộ (Chu trình 8 bước)", labelKey: "navAnalytics", glyph: "進", short: "Tiến bộ" },
@@ -585,6 +586,19 @@ export function AppNav({
                   {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
                 </span>
               )}
+            </Link>
+
+            {/* Direct Study Rooms (Group Call) Button */}
+            <Link
+              href="/app/study-rooms"
+              onClick={playClick}
+              className={`relative hidden sm:inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition hover:border-slate-300 active:scale-95 dark:border-slate-700 dark:bg-sumi-900 dark:text-slate-200 ${
+                active("/app/study-rooms") ? "ring-2 ring-red-500 text-red-600 dark:text-red-400" : ""
+              }`}
+              title="Phòng học Kaiwa nhóm (Call video & Màn hình)"
+              aria-label="Phòng học Kaiwa nhóm"
+            >
+              <span className="text-sm sm:text-base">🎙️</span>
             </Link>
 
             {/* Direct Desktop Community Button */}
