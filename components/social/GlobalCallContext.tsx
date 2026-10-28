@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { WebRTCCallModal, ActiveCallState } from "./WebRTCCallModal";
 import { useNativeLanguage } from "@/components/LanguageContext";
 import { getSocialTranslation } from "@/lib/socialI18n";
-import { playNihonQuestChime } from "@/lib/nihonChime";
+import { showSystemDeviceNotification } from "@/lib/push-client";
 
 interface IncomingCallData {
   id: string;
@@ -95,15 +95,29 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
         const convs: UnreadConversationSummary[] = Array.isArray(data.conversations)
           ? data.conversations
           : [];
+        const unreadList = convs.filter((c) => c.unreadCount > 0);
 
-        // Play Nihon Quest chime when a new unread message arrives after initial load
-        if (prevUnreadRef.current !== null && totalUnread > prevUnreadRef.current) {
-          playNihonQuestChime();
+        // If a new unread message arrived and tab is in background, trigger native OS notification
+        if (
+          prevUnreadRef.current !== null &&
+          totalUnread > prevUnreadRef.current &&
+          typeof document !== "undefined" &&
+          document.visibilityState !== "visible"
+        ) {
+          const newest = unreadList[0];
+          showSystemDeviceNotification({
+            title: newest
+              ? `💬 Tin nhắn từ ${newest.friend.name}`
+              : "💬 Tin nhắn mới trên Nihon Quest",
+            body: newest?.lastMessage?.content || "Bạn có tin nhắn mới chưa đọc.",
+            url: newest ? `/app/messages?friendId=${newest.friend.id}` : "/app/messages",
+            tag: `msg-${newest?.friend.id || Date.now()}`,
+          }).catch(() => {});
         }
         prevUnreadRef.current = totalUnread;
 
         setUnreadMessagesCount(totalUnread);
-        setUnreadConversations(convs.filter((c) => c.unreadCount > 0));
+        setUnreadConversations(unreadList);
         setLatestConversation(convs.find((c) => c.lastMessage !== null) || convs[0] || null);
       }
 
@@ -116,9 +130,21 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
           ? fData.friends.slice(0, 3)
           : [];
 
-        // Play Nihon Quest chime when a new friend request arrives after initial load
-        if (prevFriendReqCountRef.current !== null && reqs.length > prevFriendReqCountRef.current) {
-          playNihonQuestChime("furin");
+        if (
+          prevFriendReqCountRef.current !== null &&
+          reqs.length > prevFriendReqCountRef.current &&
+          typeof document !== "undefined" &&
+          document.visibilityState !== "visible"
+        ) {
+          const newestReq = reqs[0];
+          showSystemDeviceNotification({
+            title: "🤝 Lời mời kết bạn mới!",
+            body: newestReq
+              ? `${newestReq.name} muốn kết bạn trên Nihon Quest!`
+              : "Bạn có lời mời kết bạn mới trên Nihon Quest!",
+            url: "/app/messages?tab=REQUESTS",
+            tag: `friend-req-${newestReq?.userId || Date.now()}`,
+          }).catch(() => {});
         }
         prevFriendReqCountRef.current = reqs.length;
 
@@ -139,7 +165,6 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
           body: JSON.stringify({ action: "accept", friendshipId }),
         });
         if (res.ok) {
-          playNihonQuestChime("sakura");
           await refreshUnreadCount();
           return true;
         }

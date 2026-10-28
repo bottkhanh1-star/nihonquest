@@ -6,17 +6,13 @@ import { useUserProgress } from "@/components/UserProgressContext";
 import { useNativeLanguage } from "@/components/LanguageContext";
 import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 import { useGlobalCall } from "@/components/social/GlobalCallContext";
-import { IconButton } from "@/components/ui";
+import { Icon, IconButton } from "@/components/ui";
 import { registerPushSubscription, sendServerTestPush } from "@/lib/push-client";
-import {
-  NIHON_CHIME_STYLES,
-  getPreferredChimeStyle,
-  setPreferredChimeStyle,
-  playNihonQuestChime,
-} from "@/lib/nihonChime";
 
 const DECLINED_STORAGE_KEY = "nq_push_permission_declined";
 const INAPP_ENABLED_KEY = "nq_inapp_notifications_enabled";
+const READ_NOTIF_STORAGE_KEY = "nq_notif_read_ids";
+const DISMISSED_NOTIF_STORAGE_KEY = "nq_notif_dismissed_ids";
 
 interface NotificationItem {
   id: string;
@@ -47,20 +43,43 @@ export function NotificationDropdown() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [showAutoPrompt, setShowAutoPrompt] = useState(false);
+  const [filterTab, setFilterTab] = useState<"ALL" | "UNREAD">("ALL");
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [devicePermission, setDevicePermission] = useState<NotificationPermission | "default">("default");
-  const [chimeStyle, setChimeStyle] = useState<"sakura" | "furin" | "matsuri">("sakura");
-  const [isRingingAnim, setIsRingingAnim] = useState(false);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
+  // Load persisted read & dismissed notification IDs from localStorage
   useEffect(() => {
-    setChimeStyle(getPreferredChimeStyle());
+    if (typeof window === "undefined") return;
+    try {
+      const savedRead = localStorage.getItem(READ_NOTIF_STORAGE_KEY);
+      if (savedRead) {
+        const parsed = JSON.parse(savedRead);
+        if (Array.isArray(parsed)) setReadIds(new Set(parsed));
+      }
+      const savedDismissed = localStorage.getItem(DISMISSED_NOTIF_STORAGE_KEY);
+      if (savedDismissed) {
+        const parsed = JSON.parse(savedDismissed);
+        if (Array.isArray(parsed)) setDismissedIds(new Set(parsed));
+      }
+    } catch {}
   }, []);
 
-  const triggerBellSwing = useCallback(() => {
-    setIsRingingAnim(true);
-    setTimeout(() => setIsRingingAnim(false), 900);
+  const persistReadIds = useCallback((nextSet: Set<string>) => {
+    setReadIds(nextSet);
+    try {
+      localStorage.setItem(READ_NOTIF_STORAGE_KEY, JSON.stringify(Array.from(nextSet)));
+    } catch {}
+  }, []);
+
+  const persistDismissedIds = useCallback((nextSet: Set<string>) => {
+    setDismissedIds(nextSet);
+    try {
+      localStorage.setItem(DISMISSED_NOTIF_STORAGE_KEY, JSON.stringify(Array.from(nextSet)));
+    } catch {}
   }, []);
 
   // Check initial notification permission on mount, sync background push,
@@ -86,9 +105,7 @@ export function NotificationDropdown() {
         return;
       }
 
-      // Permission is "default" and user has NOT declined:
-      // 1. Try requesting native permission automatically if browser allows it on load
-      // 2. Always show the interactive prompt banner so mobile & desktop browsers can grant with 1 tap
+      // Permission is "default" and user has NOT declined
       const timer = setTimeout(() => {
         try {
           Notification.requestPermission()
@@ -96,13 +113,11 @@ export function NotificationDropdown() {
               setDevicePermission(perm);
               if (perm === "granted") {
                 setShowAutoPrompt(false);
-                playNihonQuestChime("sakura");
                 registerPushSubscription().catch(() => {});
               } else if (perm === "denied") {
                 localStorage.setItem(DECLINED_STORAGE_KEY, "true");
                 setShowAutoPrompt(false);
               } else {
-                // Still "default" (browser blocked auto-request without user gesture) -> show prompt UI
                 setShowAutoPrompt(true);
               }
             })
@@ -116,7 +131,6 @@ export function NotificationDropdown() {
 
       return () => clearTimeout(timer);
     } else {
-      // Mobile browser where window.Notification is not directly on window (e.g. iOS Safari tab)
       if (inAppEnabled) {
         setDevicePermission("granted");
         return;
@@ -133,20 +147,16 @@ export function NotificationDropdown() {
   // Listen for custom event from Mobile Drawer / Quick Settings so tapping "Thông báo" anywhere opens this menu
   useEffect(() => {
     const handleOpenEvent = () => {
-      playNihonQuestChime();
-      triggerBellSwing();
       setIsOpen(true);
     };
     window.addEventListener("nq:open-notifications", handleOpenEvent);
     return () => window.removeEventListener("nq:open-notifications", handleOpenEvent);
-  }, [triggerBellSwing]);
+  }, []);
 
   const requestDevicePermission = useCallback(async () => {
-    playNihonQuestChime("sakura");
-    triggerBellSwing();
+    playClick();
     if (typeof window === "undefined") return;
 
-    // Clear any previous manual decline flag since user explicitly clicked Enable
     try {
       localStorage.removeItem(DECLINED_STORAGE_KEY);
     } catch {}
@@ -159,18 +169,16 @@ export function NotificationDropdown() {
         showToast({
           title:
             nativeLanguage === "vi"
-              ? "Đã bật chuông Nihon Quest! 🎐"
-              : "Nihon Quest Bell Enabled! 🎐",
+              ? "Đã bật thông báo hệ thống thiết bị! 🔔"
+              : "Device System Notifications Enabled! 🔔",
           description:
             nativeLanguage === "vi"
-              ? "Bạn sẽ nhận được thông báo kết bạn, bài học, tin nhắn và cuộc gọi ngay cả khi tắt web!"
-              : "You will receive friend requests, lessons, messages and calls even when closed!",
+              ? "Thông báo sẽ gửi trực tiếp về thanh thông báo điện thoại/máy tính kèm âm báo theo cài đặt máy ngay cả khi tắt web!"
+              : "Notifications will be delivered directly to your device OS with system sound even when closed!",
           type: "info",
         });
 
-        if (!result.fallbackMode) {
-          await sendServerTestPush();
-        }
+        await sendServerTestPush();
       } else {
         if ("Notification" in window && Notification.permission === "denied") {
           setDevicePermission("denied");
@@ -191,7 +199,7 @@ export function NotificationDropdown() {
     } catch (err) {
       console.warn("Failed to request notification permission:", err);
     }
-  }, [nativeLanguage, showToast, triggerBellSwing]);
+  }, [nativeLanguage, playClick, showToast]);
 
   const handleDeclineAutoPrompt = useCallback(() => {
     playClick();
@@ -203,60 +211,25 @@ export function NotificationDropdown() {
 
   const handleLaterAutoPrompt = useCallback(() => {
     playClick();
-    // Do NOT set DECLINED_STORAGE_KEY so it will ask again next time user enters the web!
     setShowAutoPrompt(false);
   }, [playClick]);
 
-  const handleSelectChimeStyle = useCallback(
-    (style: "sakura" | "furin" | "matsuri") => {
-      setChimeStyle(style);
-      setPreferredChimeStyle(style);
-      playNihonQuestChime(style);
-      triggerBellSwing();
-    },
-    [triggerBellSwing]
-  );
-
   const testDeviceNotification = useCallback(async () => {
-    // Always play signature Nihon Quest chime immediately!
-    playNihonQuestChime(chimeStyle);
-    triggerBellSwing();
-
+    playClick();
     showToast({
       title:
         nativeLanguage === "vi"
-          ? "🎐 Đang ngân vang chuông Nihon Quest!"
-          : "🎐 Playing Nihon Quest Chime!",
+          ? "📲 Đang bắn thông báo về hệ thống thiết bị..."
+          : "📲 Sending Push to Device OS...",
       description:
         nativeLanguage === "vi"
-          ? "Giai điệu Koto & Chuông gió Fūrin đặc trưng cùng thông báo đẩy tới thiết bị."
-          : "Signature Koto & Fūrin wind chime with device push notification.",
+          ? "Kiểm tra thanh thông báo của điện thoại/máy tính (âm chuông & rung phát theo cài đặt máy)."
+          : "Check your device notification bar (sound & vibration follow your OS settings).",
       type: "info",
     });
 
-    try {
-      const res = await sendServerTestPush();
-      if (!res.success && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-        new Notification("Nihon Quest 🎐 — Lời nhắc học tập", {
-          body:
-            nativeLanguage === "vi"
-              ? "Đã đến giờ ôn tập! Hãy duy trì chuỗi Streak và hoàn thành bài học tiếng Nhật hôm nay nhé! 🌸"
-              : "Time to practice! Keep your streak alive and complete your Japanese lesson today! 🌸",
-          icon: "/icon.png",
-        });
-      }
-    } catch {
-      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-        new Notification("Nihon Quest 🎐 — Lời nhắc học tập", {
-          body:
-            nativeLanguage === "vi"
-              ? "Đã đến giờ ôn tập! Hãy duy trì chuỗi Streak và hoàn thành bài học tiếng Nhật hôm nay nhé! 🌸"
-              : "Time to practice! Keep your streak alive and complete your Japanese lesson today! 🌸",
-          icon: "/icon.png",
-        });
-      }
-    }
-  }, [chimeStyle, nativeLanguage, showToast, triggerBellSwing]);
+    await sendServerTestPush();
+  }, [nativeLanguage, playClick, showToast]);
 
   const handleQuickAcceptFriend = useCallback(
     async (friendshipId: string, friendName: string) => {
@@ -281,11 +254,11 @@ export function NotificationDropdown() {
   );
 
   // Build active dynamic notifications based on live user progress, friends, messages, and lessons
-  const notifications: NotificationItem[] = [];
+  const allNotifications: NotificationItem[] = [];
 
   // 1. Live Incoming Call Alert (Highest Priority)
   if (incomingCall) {
-    notifications.push({
+    allNotifications.push({
       id: `notif-call-${incomingCall.id}`,
       type: "call",
       title:
@@ -307,7 +280,7 @@ export function NotificationDropdown() {
   // 2. Kết bạn mới (New Friend Requests & Accepted Friends)
   if (incomingFriendRequests.length > 0) {
     incomingFriendRequests.forEach((req) => {
-      notifications.push({
+      allNotifications.push({
         id: `notif-friend-req-${req.friendshipId}`,
         type: "friend",
         title:
@@ -335,7 +308,7 @@ export function NotificationDropdown() {
     });
   } else if (recentFriends.length > 0) {
     const latestFriend = recentFriends[0];
-    notifications.push({
+    allNotifications.push({
       id: `notif-friend-connected-${latestFriend.userId}`,
       type: "friend",
       title:
@@ -351,7 +324,7 @@ export function NotificationDropdown() {
       time: nativeLanguage === "vi" ? "Bạn bè" : "Friends",
     });
   } else {
-    notifications.push({
+    allNotifications.push({
       id: "notif-friend-discover",
       type: "friend",
       title:
@@ -372,7 +345,7 @@ export function NotificationDropdown() {
   if (unreadConversations.length > 0) {
     unreadConversations.slice(0, 3).forEach((conv) => {
       const preview = conv.lastMessage?.content || "Tin nhắn mới";
-      notifications.push({
+      allNotifications.push({
         id: `notif-msg-${conv.friend.id}-${conv.lastMessage?.id || conv.unreadCount}`,
         type: "message",
         title:
@@ -388,7 +361,7 @@ export function NotificationDropdown() {
     });
   } else if (latestConversation && latestConversation.lastMessage) {
     const preview = latestConversation.lastMessage.content;
-    notifications.push({
+    allNotifications.push({
       id: `notif-msg-latest-${latestConversation.friend.id}`,
       type: "message",
       title:
@@ -404,7 +377,7 @@ export function NotificationDropdown() {
       time: nativeLanguage === "vi" ? "Hộp thư" : "Inbox",
     });
   } else if (unreadMessagesCount > 0) {
-    notifications.push({
+    allNotifications.push({
       id: "notif-unread-messages",
       type: "message",
       title:
@@ -433,7 +406,7 @@ export function NotificationDropdown() {
   const nextLessonNumber = Math.min(completedLessons + 1, totalLessons);
 
   // 4. Bài học hôm nay (Next Lesson & Curriculum Progress)
-  notifications.push({
+  allNotifications.push({
     id: `notif-lesson-${learningLevel}-${nextLessonNumber}`,
     type: "lesson",
     title:
@@ -458,7 +431,7 @@ export function NotificationDropdown() {
 
   // 5. SRS Due Notification
   if (dueCards > 0) {
-    notifications.push({
+    allNotifications.push({
       id: "notif-srs",
       type: "srs",
       title: t("notifSrsTitle").replace("{n}", String(dueCards)),
@@ -470,7 +443,7 @@ export function NotificationDropdown() {
   }
 
   // 6. Daily Streak Alert
-  notifications.push({
+  allNotifications.push({
     id: "notif-streak",
     type: "streak",
     title: t("notifStreakTitle").replace("{n}", String(streak)),
@@ -482,7 +455,7 @@ export function NotificationDropdown() {
 
   // 7. Roadmap Milestone
   if (completedLessons < totalLessons) {
-    notifications.push({
+    allNotifications.push({
       id: "notif-mission",
       type: "mission",
       title: t("notifMilestoneTitle")
@@ -496,7 +469,7 @@ export function NotificationDropdown() {
   }
 
   // 8. Kawaii Sensei Daily Tip
-  notifications.push({
+  allNotifications.push({
     id: "notif-sensei",
     type: "sensei",
     title: t("notifTipTitle"),
@@ -506,8 +479,16 @@ export function NotificationDropdown() {
     time: "Sensei",
   });
 
-  const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
-  const hasUrgent = notifications.some((n) => n.isUrgent && !readIds.has(n.id));
+  // Filter out dismissed notifications
+  const activeNotifications = allNotifications.filter((n) => !dismissedIds.has(n.id));
+  const unreadCount = activeNotifications.filter((n) => !readIds.has(n.id)).length;
+  const readCount = activeNotifications.filter((n) => readIds.has(n.id)).length;
+  const hasUrgent = activeNotifications.some((n) => n.isUrgent && !readIds.has(n.id));
+
+  const displayedNotifications =
+    filterTab === "UNREAD"
+      ? activeNotifications.filter((n) => !readIds.has(n.id))
+      : activeNotifications;
 
   // Dismiss on outside click / Escape
   useEffect(() => {
@@ -528,77 +509,99 @@ export function NotificationDropdown() {
     };
   }, [isOpen]);
 
+  const handleMarkOneRead = (id: string) => {
+    playClick();
+    const next = new Set(readIds);
+    next.add(id);
+    persistReadIds(next);
+  };
+
+  const handleDeleteOne = (id: string) => {
+    playClick();
+    setDeletingIds((prev) => new Set(prev).add(id));
+    setTimeout(() => {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      const nextDismissed = new Set(dismissedIds);
+      nextDismissed.add(id);
+      persistDismissedIds(nextDismissed);
+    }, 210);
+  };
+
   const handleMarkAllRead = () => {
     playClick();
-    setReadIds(new Set(notifications.map((n) => n.id)));
+    const next = new Set(readIds);
+    activeNotifications.forEach((n) => next.add(n.id));
+    persistReadIds(next);
+  };
+
+  const handleDeleteAllRead = () => {
+    playClick();
+    const toRemove = activeNotifications.filter((n) => readIds.has(n.id)).map((n) => n.id);
+    if (toRemove.length === 0) return;
+
+    setDeletingIds((prev) => {
+      const next = new Set(prev);
+      toRemove.forEach((id) => next.add(id));
+      return next;
+    });
+
+    setTimeout(() => {
+      setDeletingIds(new Set());
+      const nextDismissed = new Set(dismissedIds);
+      toRemove.forEach((id) => nextDismissed.add(id));
+      persistDismissedIds(nextDismissed);
+    }, 210);
+  };
+
+  const handleClearAllNotifications = () => {
+    playClick();
+    const allIds = activeNotifications.map((n) => n.id);
+    setDeletingIds(new Set(allIds));
+    setTimeout(() => {
+      setDeletingIds(new Set());
+      const nextDismissed = new Set(dismissedIds);
+      allIds.forEach((id) => nextDismissed.add(id));
+      persistDismissedIds(nextDismissed);
+    }, 210);
+  };
+
+  const handleRestoreNotifications = () => {
+    playClick();
+    persistDismissedIds(new Set());
+    persistReadIds(new Set());
   };
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Signature Nihon Quest Fūrin / Suzu Bell Button on BOTH Mobile and Desktop */}
+      {/* Notification Bell Button — Clean open/close without playing unwanted web audio */}
       <IconButton
         label={t("notifications") || "Thông báo"}
-        className={`relative h-9 w-9 sm:h-10 sm:w-10 transition-transform ${
+        className={`relative h-9 w-9 sm:h-10 sm:w-10 transition-all duration-200 hover:scale-105 active:scale-95 ${
           hasUrgent
             ? "border-red-300 bg-red-50/80 text-red-600 dark:border-red-800/80 dark:bg-red-950/40 dark:text-red-400"
             : ""
         }`}
         onClick={() => {
-          const nextOpen = !isOpen;
-          setIsOpen(nextOpen);
-          if (nextOpen) {
-            playNihonQuestChime(chimeStyle);
-            triggerBellSwing();
-          } else {
-            playClick();
-          }
+          playClick();
+          setIsOpen(!isOpen);
         }}
         aria-expanded={isOpen}
       >
-        {/* Custom Japanese Fūrin Wind-Chime & Shrine Bell SVG */}
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          className={`h-[19px] w-[19px] origin-top transition-transform duration-300 ${
-            isRingingAnim || hasUrgent ? "animate-bounce" : ""
+        <Icon
+          name="bell"
+          className={`h-[18px] w-[18px] transition-transform duration-300 ${
+            hasUrgent ? "animate-bell-ring" : isOpen ? "scale-110" : ""
           }`}
-           aria-hidden="true"
-        >
-          {/* Top Shrine Cord */}
-          <path
-            d="M12 2v2"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-          {/* Fūrin Dome Body */}
-          <path
-            d="M6.5 11.5C6.5 8.186 8.962 5.5 12 5.5s5.5 2.686 5.5 6v2.5c0 .828.56 1.5 1.25 1.5H5.25c.69 0 1.25-.672 1.25-1.5v-2.5Z"
-            stroke="currentColor"
-            strokeWidth="1.85"
-            strokeLinejoin="round"
-          />
-          {/* Decorative Japanese Wave / Obi Band on Bell */}
-          <path
-            d="M7.2 11.5h9.6"
-            stroke="currentColor"
-            strokeWidth="1.3"
-            strokeLinecap="round"
-            strokeDasharray="2 2"
-          />
-          {/* Clapper + Tanzaku Paper Strip (Characteristic of Japanese Fūrin) */}
-          <circle cx="12" cy="16.5" r="1.2" fill="currentColor" />
-          <path
-            d="M10.6 18.2h2.8l-.4 3.8h-2l-.4-3.8Z"
-            fill="currentColor"
-            fillOpacity="0.85"
-          />
-        </svg>
+        />
 
         {unreadCount > 0 && (
           <span
-            className={`absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black text-white ring-2 ring-white dark:ring-sumi-900 ${
-              hasUrgent ? "bg-red-600 animate-bounce" : "bg-red-600 animate-pulse"
+            className={`absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-black text-white ring-2 ring-white dark:ring-sumi-900 ${
+              hasUrgent ? "animate-bounce" : "animate-pulse"
             }`}
           >
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -608,21 +611,21 @@ export function NotificationDropdown() {
 
       {/* AUTO-PROMPT BANNER ON PAGE ENTRY (Shown automatically every time user enters web unless granted or declined) */}
       {showAutoPrompt && !isOpen && devicePermission !== "granted" && (
-        <div className="fixed inset-x-3 top-16 z-[9990] mx-auto max-w-md animate-slide-in-down rounded-2xl border-2 border-red-500/70 bg-white/98 p-3.5 shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:right-6 sm:top-20 sm:w-96 dark:border-red-500/50 dark:bg-sumi-900/98">
+        <div className="fixed inset-x-3 top-16 z-[9990] mx-auto max-w-md animate-spring-up rounded-2xl border-2 border-red-500/70 bg-white/98 p-3.5 shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:right-6 sm:top-20 sm:w-96 dark:border-red-500/50 dark:bg-sumi-900/98">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-xl shadow-xs dark:bg-red-950/60">
-              🎐
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-xl shadow-xs dark:bg-red-950/60 animate-bell-ring">
+              🔔
             </div>
             <div className="min-w-0 flex-1">
               <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
                 {nativeLanguage === "vi"
-                  ? "Bật chuông thông báo Nihon Quest?"
-                  : "Enable Nihon Quest Bell Notifications?"}
+                  ? "Bật thông báo hệ thống điện thoại?"
+                  : "Enable Device System Notifications?"}
               </h4>
               <p className="mt-0.5 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
                 {nativeLanguage === "vi"
-                  ? "Nhận ngay cuộc gọi đến, lời mời kết bạn, tin nhắn và nhắc bài học mỗi ngày với tiếng chuông gió Nhật Bản đặc trưng."
-                  : "Get instant alerts for calls, friend requests, messages, and daily lessons with our signature Japanese wind chime."}
+                  ? "Nhận thông báo có chuông & rung trực tiếp về điện thoại/máy tính khi có cuộc gọi, tin nhắn, kết bạn và nhắc bài học ngay cả khi không mở web."
+                  : "Receive native OS notifications with sound & vibration for calls, messages, friend requests, and lessons even when closed."}
               </p>
             </div>
           </div>
@@ -647,7 +650,7 @@ export function NotificationDropdown() {
               onClick={requestDevicePermission}
               className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-3.5 py-1.5 text-[11px] font-extrabold text-white shadow-md transition hover:bg-red-700 active:scale-95"
             >
-              <span>🎐</span>
+              <span>🔔</span>
               <span>{nativeLanguage === "vi" ? "Cho phép" : "Allow"}</span>
             </button>
           </div>
@@ -658,37 +661,48 @@ export function NotificationDropdown() {
         <>
           {/* Mobile backdrop for clean outside tap dismissal */}
           <div
-            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-xs sm:hidden"
+            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-xs sm:hidden animate-fade-in"
             onClick={() => setIsOpen(false)}
             aria-hidden="true"
           />
           <div
             role="menu"
             aria-label={t("notifications")}
-            className="fixed left-3 right-3 top-16 z-50 mx-auto max-w-md sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:mx-0 sm:w-[400px] sm:max-w-none rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xl dark:border-slate-700 dark:bg-sumi-900 animate-in fade-in slide-in-from-top-2 duration-150"
+            className="nq-dropdown-enter fixed left-3 right-3 top-16 z-50 mx-auto max-w-md sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:mx-0 sm:w-[410px] sm:max-w-none rounded-2xl border border-slate-200/90 bg-white/98 p-3.5 shadow-2xl backdrop-blur-xl dark:border-slate-700/90 dark:bg-sumi-900/98"
           >
             {/* Header */}
-            <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <span className="text-base">🎐</span>
+                <span className="text-base">🔔</span>
                 <h4 className="font-extrabold text-sm text-slate-800 dark:text-slate-100">
                   {t("notifications")}
                 </h4>
                 {unreadCount > 0 && (
                   <span className="bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400 text-[10px] font-black px-2 py-0.5 rounded-full">
-                    {unreadCount}
+                    {unreadCount} {nativeLanguage === "vi" ? "mới" : "new"}
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {unreadCount > 0 && (
                   <button
                     type="button"
                     onClick={handleMarkAllRead}
-                    className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition font-medium"
+                    className="rounded-lg px-2 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-sumi-800 transition"
+                    title={nativeLanguage === "vi" ? "Đánh dấu tất cả là đã đọc" : "Mark all as read"}
                   >
-                    {t("markAllAsRead")}
+                    ✓ {nativeLanguage === "vi" ? "Đọc hết" : "Read all"}
+                  </button>
+                )}
+                {readCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteAllRead}
+                    className="rounded-lg px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 transition"
+                    title={nativeLanguage === "vi" ? "Xóa tất cả thông báo đã đọc" : "Delete all read notifications"}
+                  >
+                    🗑️ {nativeLanguage === "vi" ? `Xóa đã đọc (${readCount})` : `Clear read (${readCount})`}
                   </button>
                 )}
                 <button
@@ -702,82 +716,48 @@ export function NotificationDropdown() {
               </div>
             </div>
 
-            {/* Nihon Quest Signature Chime Selector & Device Permission Banner */}
-            <div className="mb-2.5 p-2.5 rounded-xl border transition-all text-xs bg-gradient-to-br from-red-50/70 via-white to-amber-50/50 dark:from-sumi-950 dark:via-sumi-900 dark:to-red-950/30 border-red-200/70 dark:border-slate-800">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-1.5 font-extrabold text-[11px] text-slate-800 dark:text-slate-100">
-                  <span>🎐</span>
-                  <span>
-                    {nativeLanguage === "vi"
-                      ? "Giai điệu Chuông Nihon Quest:"
-                      : "Nihon Quest Chime Melody:"}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={testDeviceNotification}
-                  className="rounded-lg bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 text-[10px] font-extrabold transition shadow-xs active:scale-95"
-                >
-                  {nativeLanguage === "vi" ? "Nghe thử chuông 🎐" : "Play Chime 🎐"}
-                </button>
-              </div>
-
-              {/* 3 Japanese Chime Presets */}
-              <div className="grid grid-cols-3 gap-1.5 mb-2">
-                {NIHON_CHIME_STYLES.map((sItem) => {
-                  const active = chimeStyle === sItem.id;
-                  return (
-                    <button
-                      key={sItem.id}
-                      type="button"
-                      onClick={() => handleSelectChimeStyle(sItem.id)}
-                      className={`rounded-lg px-2 py-1.5 text-[10px] font-bold transition text-center truncate border ${
-                        active
-                          ? "bg-red-600 text-white border-red-600 shadow-xs"
-                          : "bg-white/90 dark:bg-sumi-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-red-300"
-                      }`}
-                    >
-                      {sItem.emoji}{" "}
-                      {sItem.id === "sakura"
-                        ? "Sakura Koto"
-                        : sItem.id === "furin"
-                          ? "Edo Fūrin"
-                          : "Kyoto Suzu"}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Device Push Status Row */}
+            {/* Device OS Notification Status Banner */}
+            <div className="mb-2.5 p-2.5 rounded-xl border transition-all text-xs bg-slate-50/90 dark:bg-sumi-950/70 border-slate-200/80 dark:border-slate-800">
               {devicePermission === "granted" ? (
-                <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60 dark:border-slate-800">
-                  <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">
-                    <span>✓</span>
-                    <span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-extrabold text-[11px]">
+                      <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>
+                        {nativeLanguage === "vi"
+                          ? "Thông báo hệ thống điện thoại: Đang bật"
+                          : "Device System Push: Active"}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                       {nativeLanguage === "vi"
-                        ? "Thông báo thiết bị: Đang bật"
-                        : "Device notifications: Active"}
-                    </span>
+                        ? "Tự động phát chuông & rung theo cài đặt máy ngay cả khi tắt web."
+                        : "Plays native OS sound & vibration even when browser is closed."}
+                    </p>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-medium">
-                    {nativeLanguage === "vi" ? "Đồng bộ tự động" : "Auto-synced"}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={testDeviceNotification}
+                    className="shrink-0 rounded-xl bg-white dark:bg-sumi-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-[10px] font-extrabold text-slate-700 dark:text-slate-200 hover:border-red-300 hover:text-red-600 transition shadow-xs active:scale-95"
+                  >
+                    {nativeLanguage === "vi" ? "Test về máy 📲" : "Test Push 📲"}
+                  </button>
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60 dark:border-slate-800">
-                  <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium leading-snug">
                     {devicePermission === "denied"
                       ? nativeLanguage === "vi"
-                        ? "Thông báo đang tắt trên trình duyệt. Bấm để bật lại:"
+                        ? "Quyền thông báo đang bị chặn trên trình duyệt. Bấm để bật lại:"
                         : "Notifications blocked in browser. Tap to retry:"
                       : nativeLanguage === "vi"
-                        ? "Nhận chuông báo ngay cả khi tắt trình duyệt:"
-                        : "Receive alerts even when browser is closed:"}
+                        ? "Nhận thông báo đẩy có chuông về điện thoại ngay cả khi tắt web:"
+                        : "Get native OS push notifications with sound even when closed:"}
                   </div>
                   <button
                     type="button"
                     onClick={requestDevicePermission}
-                    className="shrink-0 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold px-2.5 py-1 text-[10px] shadow-xs transition active:scale-95"
+                    className="shrink-0 rounded-xl bg-red-600 hover:bg-red-700 text-white font-extrabold px-3 py-1.5 text-[11px] shadow-xs transition active:scale-95"
                   >
                     {nativeLanguage === "vi" ? "Bật ngay 🔔" : "Enable 🔔"}
                   </button>
@@ -785,101 +765,205 @@ export function NotificationDropdown() {
               )}
             </div>
 
-            {/* Category Pills Overview */}
-            <div className="mb-2 flex items-center gap-1.5 overflow-x-auto pb-1 text-[10px] font-bold text-slate-500 dark:text-slate-400">
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-sumi-800 px-2 py-0.5 shrink-0">
-                🤝 {nativeLanguage === "vi" ? "Kết bạn" : "Friends"} ({incomingFriendRequests.length})
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-sumi-800 px-2 py-0.5 shrink-0">
-                💬 {nativeLanguage === "vi" ? "Tin nhắn" : "Messages"} ({unreadMessagesCount})
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-sumi-800 px-2 py-0.5 shrink-0">
-                📖 {nativeLanguage === "vi" ? `Bài ${nextLessonNumber}` : `Lesson ${nextLessonNumber}`}
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-sumi-800 px-2 py-0.5 shrink-0">
-                🔥 {streak}d Streak
-              </span>
+            {/* Filter Tabs + Clear All Bar */}
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="inline-flex rounded-xl bg-slate-100 dark:bg-sumi-800 p-0.5 text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClick();
+                    setFilterTab("ALL");
+                  }}
+                  className={`rounded-lg px-2.5 py-1 transition ${
+                    filterTab === "ALL"
+                      ? "bg-white dark:bg-sumi-900 text-slate-900 dark:text-white shadow-xs"
+                      : "text-slate-500 hover:text-slate-800 dark:text-slate-400"
+                  }`}
+                >
+                  {nativeLanguage === "vi"
+                    ? `Tất cả (${activeNotifications.length})`
+                    : `All (${activeNotifications.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClick();
+                    setFilterTab("UNREAD");
+                  }}
+                  className={`rounded-lg px-2.5 py-1 transition ${
+                    filterTab === "UNREAD"
+                      ? "bg-white dark:bg-sumi-900 text-red-600 dark:text-red-400 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800 dark:text-slate-400"
+                  }`}
+                >
+                  {nativeLanguage === "vi"
+                    ? `Chưa đọc (${unreadCount})`
+                    : `Unread (${unreadCount})`}
+                </button>
+              </div>
+
+              {activeNotifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAllNotifications}
+                  className="text-[11px] font-bold text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition"
+                >
+                  {nativeLanguage === "vi" ? "Xóa tất cả" : "Clear all"}
+                </button>
+              )}
             </div>
 
             {/* Notification List */}
             <div className="max-h-[55dvh] sm:max-h-80 overflow-y-auto space-y-2 pr-0.5">
-              {notifications.map((item) => {
-                const isRead = readIds.has(item.id);
-                const isPriority =
-                  item.isUrgent ||
-                  item.type === "call" ||
-                  (item.type === "friend" && incomingFriendRequests.length > 0);
-                const isLesson = item.type === "lesson";
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`p-2.5 rounded-xl border transition ${
-                      isPriority
-                        ? "bg-red-50/75 dark:bg-red-950/35 border-red-200 dark:border-red-900/60 shadow-xs ring-1 ring-red-400/30"
-                        : isLesson
-                          ? "bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/50 shadow-xs"
-                          : isRead
-                            ? "bg-slate-50/60 dark:bg-sumi-950/40 border-slate-100 dark:border-slate-800/80 opacity-70"
-                            : "bg-white dark:bg-sumi-800/90 border-slate-200/80 dark:border-slate-700 shadow-sm"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-1.5">
-                      <h5
-                        className={`font-bold text-xs leading-snug ${
-                          isPriority
-                            ? "text-red-700 dark:text-red-300"
-                            : isLesson
-                              ? "text-amber-900 dark:text-amber-300"
-                              : "text-slate-900 dark:text-slate-100"
-                        }`}
-                      >
-                        {item.title}
-                      </h5>
-                      <span className="text-[10px] text-slate-400 shrink-0 font-semibold px-1.5 py-0.5 rounded-md bg-white/70 dark:bg-sumi-900/60">
-                        {item.time}
+              {displayedNotifications.length === 0 ? (
+                <div className="py-8 px-4 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-sumi-950/30">
+                  <div className="text-2xl mb-1.5">✨</div>
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {filterTab === "UNREAD"
+                      ? nativeLanguage === "vi"
+                        ? "Bạn đã đọc hết mọi thông báo!"
+                        : "You're all caught up!"
+                      : nativeLanguage === "vi"
+                        ? "Danh sách thông báo đang trống"
+                        : "No notifications"}
+                  </p>
+                  {dismissedIds.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleRestoreNotifications}
+                      className="mt-2.5 inline-flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-sumi-800 px-3 py-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:border-red-300 hover:text-red-600 transition shadow-xs"
+                    >
+                      <span>🔄</span>
+                      <span>
+                        {nativeLanguage === "vi"
+                          ? "Khôi phục các nhắc nhở đã xóa"
+                          : "Restore dismissed reminders"}
                       </span>
-                    </div>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                displayedNotifications.map((item, idx) => {
+                  const isRead = readIds.has(item.id);
+                  const isDeleting = deletingIds.has(item.id);
+                  const isPriority =
+                    item.isUrgent ||
+                    item.type === "call" ||
+                    (item.type === "friend" && incomingFriendRequests.length > 0);
+                  const isLesson = item.type === "lesson";
 
-                    <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                      {item.desc}
-                    </p>
-
-                    {(item.actionUrl || item.onSecondaryAction) && (
-                      <div className="mt-2 flex items-center justify-end gap-2">
-                        {item.onSecondaryAction && item.secondaryActionLabel && (
-                          <button
-                            type="button"
-                            onClick={item.onSecondaryAction}
-                            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-[10px] font-extrabold shadow-xs transition active:scale-95"
-                          >
-                            {item.secondaryActionLabel}
-                          </button>
-                        )}
-                        {item.actionUrl && (
-                          <Link
-                            href={item.actionUrl}
-                            onClick={() => {
-                              playClick();
-                              setIsOpen(false);
-                              setReadIds((prev) => new Set(prev).add(item.id));
-                            }}
-                            className={`text-[11px] font-extrabold hover:underline inline-flex items-center gap-1 ${
-                              isPriority
-                                ? "text-red-700 dark:text-red-300"
-                                : isLesson
-                                  ? "text-amber-700 dark:text-amber-400"
-                                  : "text-red-600 dark:text-red-400"
+                  return (
+                    <div
+                      key={item.id}
+                      style={{ animationDelay: `${Math.min(idx * 35, 210)}ms` }}
+                      className={`group relative p-2.5 rounded-xl border transition-all duration-200 ${
+                        isDeleting
+                          ? "translate-x-8 scale-95 opacity-0 pointer-events-none"
+                          : "nq-notif-item-enter hover:-translate-y-0.5 hover:shadow-md"
+                      } ${
+                        isRead
+                          ? "bg-slate-50/70 dark:bg-sumi-950/40 border-slate-100 dark:border-slate-800/80 opacity-75"
+                          : isPriority
+                            ? "bg-red-50/75 dark:bg-red-950/35 border-red-200 dark:border-red-900/60 shadow-xs ring-1 ring-red-400/30"
+                            : isLesson
+                              ? "bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/50 shadow-xs"
+                              : "bg-white dark:bg-sumi-800/90 border-slate-200/80 dark:border-slate-700 shadow-sm"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {!isRead && (
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
+                          )}
+                          <h5
+                            className={`font-bold text-xs leading-snug truncate ${
+                              isRead
+                                ? "text-slate-600 dark:text-slate-400"
+                                : isPriority
+                                  ? "text-red-700 dark:text-red-300"
+                                  : isLesson
+                                    ? "text-amber-900 dark:text-amber-300"
+                                    : "text-slate-900 dark:text-slate-100"
                             }`}
                           >
-                            {item.actionLabel}
-                          </Link>
-                        )}
+                            {item.title}
+                          </h5>
+                        </div>
+
+                        {/* Time badge + Mark Read + Delete buttons */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[10px] text-slate-400 font-semibold px-1.5 py-0.5 rounded-md bg-white/70 dark:bg-sumi-900/60">
+                            {item.time}
+                          </span>
+                          {!isRead && (
+                            <button
+                              type="button"
+                              onClick={() => handleMarkOneRead(item.id)}
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-400 transition"
+                              title={nativeLanguage === "vi" ? "Đánh dấu đã đọc" : "Mark as read"}
+                            >
+                              ✓
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOne(item.id)}
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 transition"
+                            title={nativeLanguage === "vi" ? "Xóa thông báo này" : "Delete notification"}
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                        {item.desc}
+                      </p>
+
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        {isRead ? (
+                          <span className="text-[10px] font-semibold text-slate-400">
+                            ✓ {nativeLanguage === "vi" ? "Đã đọc" : "Read"}
+                          </span>
+                        ) : (
+                          <span />
+                        )}
+
+                        <div className="flex items-center gap-2">
+                          {item.onSecondaryAction && item.secondaryActionLabel && (
+                            <button
+                              type="button"
+                              onClick={item.onSecondaryAction}
+                              className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-[10px] font-extrabold shadow-xs transition active:scale-95"
+                            >
+                              {item.secondaryActionLabel}
+                            </button>
+                          )}
+                          {item.actionUrl && (
+                            <Link
+                              href={item.actionUrl}
+                              onClick={() => {
+                                playClick();
+                                setIsOpen(false);
+                                handleMarkOneRead(item.id);
+                              }}
+                              className={`text-[11px] font-extrabold hover:underline inline-flex items-center gap-1 ${
+                                isPriority
+                                  ? "text-red-700 dark:text-red-300"
+                                  : isLesson
+                                    ? "text-amber-700 dark:text-amber-400"
+                                    : "text-red-600 dark:text-red-400"
+                              }`}
+                            >
+                              {item.actionLabel}
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </>

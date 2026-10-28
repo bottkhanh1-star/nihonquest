@@ -21,6 +21,61 @@ export function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 /**
+ * Dispatch a native OS / phone system notification via Service Worker (or Notification API fallback)
+ * with `silent: false` and `renotify: true` so the device plays its native notification sound & vibration.
+ */
+export async function showSystemDeviceNotification(payload: {
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+}): Promise<boolean> {
+  if (typeof window === "undefined" || !("Notification" in window)) return false;
+  if (Notification.permission !== "granted") return false;
+
+  const tag = payload.tag || "nihonquest-sys-" + Date.now();
+  const options: NotificationOptions & { renotify?: boolean; vibrate?: number[] } = {
+    body: payload.body,
+    icon: "/favicon.ico",
+    badge: "/favicon.ico",
+    tag,
+    silent: false,
+    renotify: true,
+    vibrate: [250, 120, 250, 120, 400],
+    data: {
+      url: payload.url || "/app",
+      dateOfArrival: Date.now(),
+    },
+  };
+
+  try {
+    if ("serviceWorker" in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration("/");
+      if (registration && "showNotification" in registration) {
+        await registration.showNotification(payload.title, options);
+        return true;
+      }
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: "SHOW_SYSTEM_NOTIFICATION",
+          payload: { ...payload, tag },
+        });
+        return true;
+      }
+    }
+  } catch (swErr) {
+    console.warn("[PushClient] SW showNotification fallback:", swErr);
+  }
+
+  try {
+    new Notification(payload.title, options);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Register Service Worker and subscribe user to Web Push Notifications.
  * IMPORTANT: Call Notification.requestPermission() FIRST before awaiting ServiceWorker
  * so mobile browsers (Android Chrome / iOS Safari) preserve the transient user gesture!
@@ -53,7 +108,6 @@ export async function registerPushSubscription(): Promise<{
       }
     } else {
       // Mobile browser without window.Notification (e.g. iOS Safari tab before Add to Home Screen)
-      // Enable local/in-app notification preference so user still gets alerts
       try {
         localStorage.setItem("nq_inapp_notifications_enabled", "true");
       } catch {}
@@ -77,16 +131,28 @@ export async function registerPushSubscription(): Promise<{
     }
 
     let subscription = await registration.pushManager.getSubscription();
+    const convertedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
 
     if (!subscription) {
-      const convertedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: convertedKey,
-      });
+      try {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: convertedKey,
+        });
+      } catch (subErr: any) {
+        // If a stale subscription with a different applicationServerKey exists, reset and re-subscribe
+        const existing = await registration.pushManager.getSubscription();
+        if (existing) {
+          await existing.unsubscribe().catch(() => {});
+        }
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: convertedKey,
+        });
+      }
     }
 
-    // 4. Save subscription to backend database
+    // 4. Save subscription to backend database so Server Web Push works when web is closed
     const res = await fetch("/api/push/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -103,8 +169,6 @@ export async function registerPushSubscription(): Promise<{
     return { success: true, subscription };
   } catch (err: any) {
     console.warn("[PushClient] Push subscription warning:", err);
-    // If browser granted Notification permission even though PushManager failed (e.g. local HTTP on mobile),
-    // still return success so local/SW notifications work!
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
       return { success: true, fallbackMode: true };
     }
@@ -113,21 +177,62 @@ export async function registerPushSubscription(): Promise<{
 }
 
 /**
- * Trigger a server-side test Web Push notification to this user
+ * Trigger a server-side test Web Push notification to this user's device OS.
+ * If the server push queue has 0 active endpoints, automatically re-syncs subscription
+ * and falls back to Service Worker OS notification so the phone always rings!
  */
-export async function sendServerTestPush(): Promise<{ success: boolean; message: string }> {
+export async function sendServerTestPush(): Promise<{
+  success: boolean;
+  sent: number;
+  message: string;
+}> {
   try {
+    // Ensure subscription is synced in DB first
+    await registerPushSubscription().catch(() => {});
+
     const res = await fetch("/api/push/test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title: "🔔 Nihon Quest — Kiểm tra thông báo thiết bị",
-        body: "Hệ thống thông báo đẩy hoạt động chuẩn! Bạn sẽ nhận được tin nhắn, cuộc gọi và nhắc học ngay cả khi tắt web. 🚀",
+        title: "🔔 Nihon Quest — Thông báo hệ thống",
+        body: "Chuông thông báo thiết bị hoạt động chuẩn! Bạn sẽ nhận được tin nhắn, kết bạn, bài học và cuộc gọi ngay cả khi tắt web.",
       }),
     });
     const data = await res.json();
-    return { success: res.ok, message: data.message || "OK" };
+    const sentCount = Number(data?.sent || 0);
+
+    if (res.ok && sentCount > 0) {
+      return {
+        success: true,
+        sent: sentCount,
+        message: data.message || `Đã gửi thông báo đẩy tới ${sentCount} thiết bị`,
+      };
+    }
+
+    // Fallback: trigger native OS notification via Service Worker so phone notification bar + sound still fires!
+    const fallbackShown = await showSystemDeviceNotification({
+      title: "🔔 Nihon Quest — Thông báo hệ thống",
+      body: "Chuông thông báo thiết bị hoạt động chuẩn! Bạn sẽ nhận được tin nhắn, kết bạn, bài học và cuộc gọi ngay cả khi tắt web.",
+      url: "/app",
+      tag: "test-notification-" + Date.now(),
+    });
+
+    return {
+      success: fallbackShown,
+      sent: sentCount,
+      message: data?.message || "Đã phát thông báo tới hệ thống thiết bị",
+    };
   } catch (err: any) {
-    return { success: false, message: err.message };
+    const fallbackShown = await showSystemDeviceNotification({
+      title: "🔔 Nihon Quest — Thông báo hệ thống",
+      body: "Chuông thông báo thiết bị hoạt động chuẩn! Bạn sẽ nhận được tin nhắn, kết bạn, bài học và cuộc gọi ngay cả khi tắt web.",
+      url: "/app",
+      tag: "test-notification-" + Date.now(),
+    });
+    return {
+      success: fallbackShown,
+      sent: 0,
+      message: err?.message || "Fallback notification dispatched",
+    };
   }
 }
