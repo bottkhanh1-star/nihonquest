@@ -2,18 +2,14 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import { BASE64_IMAGES } from "@/lib/assets/base64Images";
 import Link from "next/link";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
 import { NihonQuestLogo } from "@/components/NihonQuestLogo";
+import { LandingHeaderActions, LandingHeroCta } from "@/components/landing/LandingHeaderActions";
 import {
   BrushEdge,
   IconArrow,
-  IconArrowUR,
   IconBook,
   IconCards,
   IconChat,
-  IconCompass,
-  IconDash,
   IconDiscord,
   IconFlame,
   IconPen,
@@ -21,7 +17,6 @@ import {
   IconSpark,
   IconTelegram,
   IconTrain,
-  IconUser,
   IconYouTube,
   KanaArt,
   KanjiArt,
@@ -119,9 +114,7 @@ const FEATURES: {
   },
 ];
 
-export default async function Home() {
-  const session = await getServerSession(authOptions);
-
+export default function Home() {
   return (
     <div className="hp">
       {/* ============================ HERO ============================ */}
@@ -159,23 +152,7 @@ export default async function Home() {
               ))}
             </nav>
 
-            <div className="hp-actions">
-              {session?.user ? (
-                <Link href="/app" className="hp-btn hp-btn--primary hp-btn--sm">
-                  Vào ứng dụng →
-                </Link>
-              ) : (
-                <>
-                  <Link href="/login" className="hp-btn hp-btn--ghost hp-btn--sm">
-                    Đăng nhập
-                  </Link>
-                  <Link href="/register" className="hp-btn hp-btn--primary hp-btn--sm">
-                    <IconUser />
-                    Tạo tài khoản
-                  </Link>
-                </>
-              )}
-            </div>
+            <LandingHeaderActions />
           </header>
 
           <div className="hp-hero__body">
@@ -195,28 +172,7 @@ export default async function Home() {
               tình huống giao tiếp sinh tồn đời thực.
             </p>
 
-            <div className="hp-cta">
-              {session?.user ? (
-                <Link href="/app" className="hp-btn hp-btn--primary">
-                  <span className="hp-btn__dot"><IconCompass /></span>
-                  Tiếp tục hành trình học
-                  <IconArrow />
-                </Link>
-              ) : (
-                <>
-                  <Link href="/register" className="hp-btn hp-btn--primary">
-                    <span className="hp-btn__dot"><IconCompass /></span>
-                    Bắt đầu hành trình miễn phí
-                    <IconArrow />
-                  </Link>
-                  <Link href="/app" className="hp-btn hp-btn--ghost">
-                    <IconDash />
-                    Vào Dashboard ứng dụng
-                    <IconArrowUR />
-                  </Link>
-                </>
-              )}
-            </div>
+            <LandingHeroCta />
           </div>
 
           <ul className="hp-chips" style={{ listStyle: "none", margin: 0, paddingLeft: 0 }}>

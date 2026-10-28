@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
 import { WebRTCCallModal, ActiveCallState } from "./WebRTCCallModal";
 import { useNativeLanguage } from "@/components/LanguageContext";
 import { getSocialTranslation } from "@/lib/socialI18n";
@@ -65,6 +66,8 @@ interface CallContextType {
 const CallContext = createContext<CallContextType | undefined>(undefined);
 
 export function GlobalCallProvider({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === "authenticated" && Boolean(session?.user);
   const { nativeLanguage } = useNativeLanguage();
   const s = getSocialTranslation(nativeLanguage);
 
@@ -84,6 +87,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const refreshUnreadCount = useCallback(async () => {
+    if (!isAuthenticated) return;
     try {
       const [msgRes, friendsRes] = await Promise.all([
         fetch("/api/messages").catch(() => null),
@@ -153,7 +157,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
     } catch {
       // ignore
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const acceptFriendRequest = useCallback(
     async (friendshipId: string): Promise<boolean> => {
@@ -190,6 +194,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
 
   // Poll for incoming calls, unread messages, and friend requests periodically
   useEffect(() => {
+    if (!isAuthenticated) return;
     let timer: NodeJS.Timeout;
 
     async function pollCalls() {
@@ -230,7 +235,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
     }, 4500);
 
     return () => clearInterval(timer);
-  }, [refreshUnreadCount]);
+  }, [isAuthenticated, refreshUnreadCount]);
 
   // Start outgoing call
   const startCall = async (
