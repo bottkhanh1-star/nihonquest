@@ -1,4 +1,4 @@
-// Nihon Quest Web Push & System Notification Service Worker
+// Nihon Quest Web Push & Custom Chime Service Worker
 self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
@@ -7,16 +7,19 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-function buildNotificationOptions(payload) {
+function buildNotificationOptions(payload, hasActiveClient) {
   const tag = payload.tag || "nihonquest-general-" + Date.now();
   return {
     body: payload.body || "Bạn có thông báo mới từ Nihon Quest",
     icon: payload.icon || "/favicon.ico",
     badge: payload.badge || "/favicon.ico",
+    // Custom sound URL for platforms/WebAPKs supporting NotificationOptions.sound
+    sound: "/sounds/nihon-chime.wav",
     tag,
-    // silent: false + renotify: true forces Android / iOS / Windows / macOS
-    // to play the device's native system notification sound & vibration per OS settings
-    silent: false,
+    // If an app client tab (foreground or background) is alive, mute the generic OS "ding"
+    // so our custom Nihon Quest Koto/Fūrin chime plays cleanly alongside the OS banner & vibration!
+    // If all tabs are completely killed from RAM, fall back to silent: false so the OS still rings.
+    silent: hasActiveClient ? true : false,
     renotify: true,
     requireInteraction: Boolean(payload.requireInteraction || tag.startsWith("call-")),
     vibrate: payload.vibrate || [250, 120, 250, 120, 400],
@@ -31,7 +34,7 @@ function buildNotificationOptions(payload) {
   };
 }
 
-// 1. Handle Server Web Push Events (works even when browser/web is completely closed!)
+// 1. Handle Server Web Push Events
 self.addEventListener("push", (event) => {
   let payload = {
     title: "Nihon Quest 🇯🇵",
@@ -54,19 +57,39 @@ self.addEventListener("push", (event) => {
     }
   }
 
-  const options = buildNotificationOptions(payload);
-
   event.waitUntil(
-    self.registration.showNotification(payload.title || "Nihon Quest 🇯🇵", options)
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientList) => {
+        const hasClient = Array.isArray(clientList) && clientList.length > 0;
+
+        // Tell any open/background client window to play the custom Nihon Quest chime immediately!
+        if (hasClient) {
+          for (const client of clientList) {
+            try {
+              client.postMessage({
+                type: "NIHON_PUSH_RECEIVED",
+                payload,
+              });
+            } catch (e) {}
+          }
+        }
+
+        const options = buildNotificationOptions(payload, hasClient);
+        return self.registration.showNotification(
+          payload.title || "Nihon Quest 🇯🇵",
+          options
+        );
+      })
   );
 });
 
 // 2. Allow client pages to dispatch native OS system notifications through the Service Worker
-// so mobile browsers (Android Chrome / PWA) play the native phone notification sound & vibration
+// while playing the custom Nihon Quest chime
 self.addEventListener("message", (event) => {
   if (!event.data || event.data.type !== "SHOW_SYSTEM_NOTIFICATION") return;
   const payload = event.data.payload || {};
-  const options = buildNotificationOptions(payload);
+  const options = buildNotificationOptions(payload, true);
   event.waitUntil(
     self.registration.showNotification(payload.title || "Nihon Quest 🇯🇵", options)
   );

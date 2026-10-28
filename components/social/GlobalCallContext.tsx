@@ -5,6 +5,7 @@ import { WebRTCCallModal, ActiveCallState } from "./WebRTCCallModal";
 import { useNativeLanguage } from "@/components/LanguageContext";
 import { getSocialTranslation } from "@/lib/socialI18n";
 import { showSystemDeviceNotification } from "@/lib/push-client";
+import { playNihonQuestChime } from "@/lib/nihonChime";
 
 interface IncomingCallData {
   id: string;
@@ -97,22 +98,21 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
           : [];
         const unreadList = convs.filter((c) => c.unreadCount > 0);
 
-        // If a new unread message arrived and tab is in background, trigger native OS notification
-        if (
-          prevUnreadRef.current !== null &&
-          totalUnread > prevUnreadRef.current &&
-          typeof document !== "undefined" &&
-          document.visibilityState !== "visible"
-        ) {
-          const newest = unreadList[0];
-          showSystemDeviceNotification({
-            title: newest
-              ? `💬 Tin nhắn từ ${newest.friend.name}`
-              : "💬 Tin nhắn mới trên Nihon Quest",
-            body: newest?.lastMessage?.content || "Bạn có tin nhắn mới chưa đọc.",
-            url: newest ? `/app/messages?friendId=${newest.friend.id}` : "/app/messages",
-            tag: `msg-${newest?.friend.id || Date.now()}`,
-          }).catch(() => {});
+        // If a new unread message arrived, play Nihon Quest chime & show OS notification if backgrounded
+        if (prevUnreadRef.current !== null && totalUnread > prevUnreadRef.current) {
+          if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+            const newest = unreadList[0];
+            showSystemDeviceNotification({
+              title: newest
+                ? `💬 Tin nhắn từ ${newest.friend.name}`
+                : "💬 Tin nhắn mới trên Nihon Quest",
+              body: newest?.lastMessage?.content || "Bạn có tin nhắn mới chưa đọc.",
+              url: newest ? `/app/messages?friendId=${newest.friend.id}` : "/app/messages",
+              tag: `msg-${newest?.friend.id || Date.now()}`,
+            }).catch(() => {});
+          } else {
+            playNihonQuestChime();
+          }
         }
         prevUnreadRef.current = totalUnread;
 
@@ -130,21 +130,20 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
           ? fData.friends.slice(0, 3)
           : [];
 
-        if (
-          prevFriendReqCountRef.current !== null &&
-          reqs.length > prevFriendReqCountRef.current &&
-          typeof document !== "undefined" &&
-          document.visibilityState !== "visible"
-        ) {
-          const newestReq = reqs[0];
-          showSystemDeviceNotification({
-            title: "🤝 Lời mời kết bạn mới!",
-            body: newestReq
-              ? `${newestReq.name} muốn kết bạn trên Nihon Quest!`
-              : "Bạn có lời mời kết bạn mới trên Nihon Quest!",
-            url: "/app/messages?tab=REQUESTS",
-            tag: `friend-req-${newestReq?.userId || Date.now()}`,
-          }).catch(() => {});
+        if (prevFriendReqCountRef.current !== null && reqs.length > prevFriendReqCountRef.current) {
+          if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+            const newestReq = reqs[0];
+            showSystemDeviceNotification({
+              title: "🤝 Lời mời kết bạn mới!",
+              body: newestReq
+                ? `${newestReq.name} muốn kết bạn trên Nihon Quest!`
+                : "Bạn có lời mời kết bạn mới trên Nihon Quest!",
+              url: "/app/messages?tab=REQUESTS",
+              tag: `friend-req-${newestReq?.userId || Date.now()}`,
+            }).catch(() => {});
+          } else {
+            playNihonQuestChime("furin");
+          }
         }
         prevFriendReqCountRef.current = reqs.length;
 
@@ -175,6 +174,19 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
     },
     [refreshUnreadCount]
   );
+
+  // Listen for Service Worker Web Push messages so any push arriving from the server
+  // immediately plays our custom Nihon Quest chime (even when tab is in the background!)
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === "NIHON_PUSH_RECEIVED") {
+        playNihonQuestChime();
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handleSwMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", handleSwMessage);
+  }, []);
 
   // Poll for incoming calls, unread messages, and friend requests periodically
   useEffect(() => {

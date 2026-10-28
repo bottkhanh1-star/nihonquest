@@ -1,6 +1,7 @@
 "use client";
 
 import { VAPID_PUBLIC_KEY } from "@/lib/web-push-public";
+import { playNihonQuestChime } from "@/lib/nihonChime";
 
 /**
  * Convert a base64 string to a Uint8Array for VAPID applicationServerKey
@@ -33,13 +34,18 @@ export async function showSystemDeviceNotification(payload: {
   if (typeof window === "undefined" || !("Notification" in window)) return false;
   if (Notification.permission !== "granted") return false;
 
+  // Play our custom Nihon Quest chime instead of the generic phone "ding"!
+  playNihonQuestChime();
+
   const tag = payload.tag || "nihonquest-sys-" + Date.now();
-  const options: NotificationOptions & { renotify?: boolean; vibrate?: number[] } = {
+  const options: NotificationOptions & { renotify?: boolean; vibrate?: number[]; sound?: string } = {
     body: payload.body,
     icon: "/favicon.ico",
     badge: "/favicon.ico",
+    sound: "/sounds/nihon-chime.wav",
     tag,
-    silent: false,
+    // Mute the generic OS "ding" so only the Nihon Quest custom chime + OS vibration + OS banner fire!
+    silent: true,
     renotify: true,
     vibrate: [250, 120, 250, 120, 400],
     data: {

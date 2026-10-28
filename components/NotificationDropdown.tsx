@@ -8,6 +8,12 @@ import { useSoundAndTheme } from "@/components/SoundAndThemeContext";
 import { useGlobalCall } from "@/components/social/GlobalCallContext";
 import { Icon, IconButton } from "@/components/ui";
 import { registerPushSubscription, sendServerTestPush } from "@/lib/push-client";
+import {
+  NIHON_CHIME_STYLES,
+  getPreferredChimeStyle,
+  setPreferredChimeStyle,
+  playNihonQuestChime,
+} from "@/lib/nihonChime";
 
 const DECLINED_STORAGE_KEY = "nq_push_permission_declined";
 const INAPP_ENABLED_KEY = "nq_inapp_notifications_enabled";
@@ -48,12 +54,14 @@ export function NotificationDropdown() {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [devicePermission, setDevicePermission] = useState<NotificationPermission | "default">("default");
+  const [chimeStyle, setChimeStyle] = useState<"sakura" | "furin" | "matsuri">("sakura");
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
-  // Load persisted read & dismissed notification IDs from localStorage
+  // Load persisted read & dismissed notification IDs + preferred Nihon Quest chime style
   useEffect(() => {
     if (typeof window === "undefined") return;
+    setChimeStyle(getPreferredChimeStyle());
     try {
       const savedRead = localStorage.getItem(READ_NOTIF_STORAGE_KEY);
       if (savedRead) {
@@ -214,22 +222,32 @@ export function NotificationDropdown() {
     setShowAutoPrompt(false);
   }, [playClick]);
 
+  const handleSelectChimeStyle = useCallback(
+    (style: "sakura" | "furin" | "matsuri") => {
+      setChimeStyle(style);
+      setPreferredChimeStyle(style);
+      playNihonQuestChime(style);
+    },
+    []
+  );
+
   const testDeviceNotification = useCallback(async () => {
-    playClick();
+    // Play our custom Nihon Quest chime immediately while dispatching the OS push banner!
+    playNihonQuestChime(chimeStyle);
     showToast({
       title:
         nativeLanguage === "vi"
-          ? "📲 Đang bắn thông báo về hệ thống thiết bị..."
-          : "📲 Sending Push to Device OS...",
+          ? "🎐 Đang bắn thông báo & Chuông Nihon Quest về máy..."
+          : "🎐 Sending Push & Nihon Quest Chime to Device...",
       description:
         nativeLanguage === "vi"
-          ? "Kiểm tra thanh thông báo của điện thoại/máy tính (âm chuông & rung phát theo cài đặt máy)."
-          : "Check your device notification bar (sound & vibration follow your OS settings).",
+          ? "Thanh thông báo điện thoại sẽ hiện lên kèm giai điệu Chuông Nihon Quest đặc trưng!"
+          : "Your device notification bar will pop up with the custom Nihon Quest chime!",
       type: "info",
     });
 
     await sendServerTestPush();
-  }, [nativeLanguage, playClick, showToast]);
+  }, [chimeStyle, nativeLanguage, showToast]);
 
   const handleQuickAcceptFriend = useCallback(
     async (friendshipId: string, friendName: string) => {
@@ -716,43 +734,38 @@ export function NotificationDropdown() {
               </div>
             </div>
 
-            {/* Device OS Notification Status Banner */}
-            <div className="mb-2.5 p-2.5 rounded-xl border transition-all text-xs bg-slate-50/90 dark:bg-sumi-950/70 border-slate-200/80 dark:border-slate-800">
+            {/* Device OS Notification & Custom Nihon Quest Chime Banner */}
+            <div className="mb-2.5 p-2.5 rounded-xl border transition-all text-xs bg-gradient-to-br from-red-50/60 via-white to-amber-50/40 dark:from-sumi-950 dark:via-sumi-900 dark:to-red-950/25 border-slate-200/80 dark:border-slate-800">
               {devicePermission === "granted" ? (
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-extrabold text-[11px]">
                       <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                       <span>
                         {nativeLanguage === "vi"
-                          ? "Thông báo hệ thống điện thoại: Đang bật"
-                          : "Device System Push: Active"}
+                          ? "Thông báo thiết bị & Chuông Nihon Quest: Bật"
+                          : "Device Push & Nihon Quest Chime: Active"}
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      {nativeLanguage === "vi"
-                        ? "Tự động phát chuông & rung theo cài đặt máy ngay cả khi tắt web."
-                        : "Plays native OS sound & vibration even when browser is closed."}
-                    </p>
                   </div>
                   <button
                     type="button"
                     onClick={testDeviceNotification}
-                    className="shrink-0 rounded-xl bg-white dark:bg-sumi-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-[10px] font-extrabold text-slate-700 dark:text-slate-200 hover:border-red-300 hover:text-red-600 transition shadow-xs active:scale-95"
+                    className="shrink-0 rounded-xl bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 text-[10px] font-extrabold transition shadow-xs active:scale-95"
                   >
                     {nativeLanguage === "vi" ? "Test về máy 📲" : "Test Push 📲"}
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium leading-snug">
                     {devicePermission === "denied"
                       ? nativeLanguage === "vi"
-                        ? "Quyền thông báo đang bị chặn trên trình duyệt. Bấm để bật lại:"
+                        ? "Quyền thông báo đang bị chặn. Bấm để bật lại:"
                         : "Notifications blocked in browser. Tap to retry:"
                       : nativeLanguage === "vi"
-                        ? "Nhận thông báo đẩy có chuông về điện thoại ngay cả khi tắt web:"
-                        : "Get native OS push notifications with sound even when closed:"}
+                        ? "Nhận thông báo đẩy kèm Chuông Nihon Quest riêng:"
+                        : "Get OS push notifications with custom Nihon Quest chime:"}
                   </div>
                   <button
                     type="button"
@@ -763,6 +776,51 @@ export function NotificationDropdown() {
                   </button>
                 </div>
               )}
+
+              {/* Custom Nihon Quest Chime Selector for Incoming Push Alerts */}
+              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800">
+                <div className="flex items-center justify-between gap-1 mb-1.5">
+                  <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                    🎐 {nativeLanguage === "vi" ? "Chuông riêng khi có thông báo tới:" : "Custom notification chime:"}
+                  </span>
+                  <a
+                    href="/sounds/nihon-chime.wav"
+                    download="nihon-quest-chime.wav"
+                    className="text-[10px] font-extrabold text-red-600 dark:text-red-400 hover:underline"
+                    title={
+                      nativeLanguage === "vi"
+                        ? "Tải file âm thanh chuông Nihon Quest (.wav) để cài làm chuông hệ thống điện thoại"
+                        : "Download Nihon Quest chime (.wav) for phone OS notification settings"
+                    }
+                  >
+                    ⬇ {nativeLanguage === "vi" ? "Tải file chuông (.wav)" : "Download (.wav)"}
+                  </a>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {NIHON_CHIME_STYLES.map((sItem) => {
+                    const active = chimeStyle === sItem.id;
+                    return (
+                      <button
+                        key={sItem.id}
+                        type="button"
+                        onClick={() => handleSelectChimeStyle(sItem.id)}
+                        className={`rounded-lg px-2 py-1 text-[10px] font-bold transition text-center truncate border ${
+                          active
+                            ? "bg-red-600 text-white border-red-600 shadow-xs"
+                            : "bg-white/90 dark:bg-sumi-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-red-300"
+                        }`}
+                      >
+                        {sItem.emoji}{" "}
+                        {sItem.id === "sakura"
+                          ? "Sakura Koto"
+                          : sItem.id === "furin"
+                            ? "Edo Fūrin"
+                            : "Kyoto Suzu"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             {/* Filter Tabs + Clear All Bar */}

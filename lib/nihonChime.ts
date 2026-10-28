@@ -61,6 +61,22 @@ function getChimeAudioContext(): AudioContext | null {
   }
 }
 
+// Automatically unlock AudioContext on first user interaction so background push messages can play custom chimes
+if (typeof window !== "undefined") {
+  const unlock = () => {
+    try {
+      const ctx = getChimeAudioContext();
+      if (ctx && ctx.state === "suspended") {
+        ctx.resume().catch(() => {});
+      }
+    } catch {}
+    window.removeEventListener("pointerdown", unlock);
+    window.removeEventListener("keydown", unlock);
+  };
+  window.addEventListener("pointerdown", unlock, { once: true, passive: true });
+  window.addEventListener("keydown", unlock, { once: true, passive: true });
+}
+
 export function getPreferredChimeStyle(): "sakura" | "furin" | "matsuri" {
   if (typeof window === "undefined") return "sakura";
   try {
@@ -165,8 +181,18 @@ function scheduleNihonBellNote(ctx: AudioContext, baseTime: number, note: ChimeN
  * Works immediately on user gesture or when AudioContext is unlocked.
  */
 export function playNihonQuestChime(style?: NihonChimeStyle): void {
+  if (typeof window === "undefined") return;
   const ctx = getChimeAudioContext();
-  if (!ctx) return;
+
+  // Fallback to pre-rendered /sounds/nihon-chime.wav if Web Audio context is unavailable or blocked
+  if (!ctx || ctx.state === "suspended") {
+    try {
+      const audio = new Audio("/sounds/nihon-chime.wav");
+      audio.volume = 0.85;
+      audio.play().catch(() => {});
+    } catch {}
+    if (!ctx) return;
+  }
 
   const chosenStyle = style || getPreferredChimeStyle();
   const now = ctx.currentTime + 0.01;
