@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useUserProgress } from "@/components/UserProgressContext";
 import { useNativeLanguage } from "@/components/LanguageContext";
@@ -508,10 +509,10 @@ export function NotificationDropdown() {
       ? activeNotifications.filter((n) => !readIds.has(n.id))
       : activeNotifications;
 
-  // Dismiss on outside click / Escape
+  // Dismiss on outside click / pointerdown / Escape
   useEffect(() => {
     if (!isOpen) return;
-    const handleClick = (e: MouseEvent) => {
+    const handleOutside = (e: MouseEvent | PointerEvent | TouchEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
@@ -519,10 +520,12 @@ export function NotificationDropdown() {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setIsOpen(false);
     };
-    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("pointerdown", handleOutside, true);
+    document.addEventListener("mousedown", handleOutside, true);
     document.addEventListener("keydown", handleKey);
     return () => {
-      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("pointerdown", handleOutside, true);
+      document.removeEventListener("mousedown", handleOutside, true);
       document.removeEventListener("keydown", handleKey);
     };
   }, [isOpen]);
@@ -627,11 +630,11 @@ export function NotificationDropdown() {
         )}
       </IconButton>
 
-      {/* AUTO-PROMPT BANNER ON PAGE ENTRY (Shown automatically every time user enters web unless granted or declined) */}
+      {/* AUTO-PROMPT BANNER ON PAGE ENTRY (100% Solid Opaque Background) */}
       {showAutoPrompt && !isOpen && devicePermission !== "granted" && (
-        <div className="fixed inset-x-3 top-16 z-[9990] mx-auto max-w-md animate-spring-up rounded-2xl border-2 border-red-500/70 bg-white/98 p-3.5 shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:right-6 sm:top-20 sm:w-96 dark:border-red-500/50 dark:bg-sumi-900/98">
+        <div className="fixed inset-x-3 top-16 z-[9990] mx-auto max-w-md animate-spring-up rounded-2xl border-2 border-red-500 bg-white p-3.5 shadow-2xl sm:inset-x-auto sm:right-6 sm:top-20 sm:w-96 dark:border-red-500 dark:bg-sumi-900">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-xl shadow-xs dark:bg-red-950/60 animate-bell-ring">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-xl shadow-xs dark:bg-red-950 animate-bell-ring">
               🔔
             </div>
             <div className="min-w-0 flex-1">
@@ -677,22 +680,26 @@ export function NotificationDropdown() {
 
       {isOpen && (
         <>
-          {/* Mobile backdrop for clean outside tap dismissal */}
-          <div
-            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-xs sm:hidden animate-fade-in"
-            onClick={() => setIsOpen(false)}
-            aria-hidden="true"
-          />
+          {/* Full-screen click-outside backdrop rendered via Portal so clicking ANYWHERE outside closes the popup */}
+          {typeof document !== "undefined" &&
+            createPortal(
+              <div
+                className="fixed inset-0 z-40 bg-black/25 dark:bg-black/50 animate-fade-in"
+                onClick={() => setIsOpen(false)}
+                aria-hidden="true"
+              />,
+              document.body
+            )}
           <div
             role="menu"
             aria-label={t("notifications")}
-            className="nq-dropdown-enter fixed left-3 right-3 top-16 z-50 mx-auto max-w-md sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:mx-0 sm:w-[410px] sm:max-w-none rounded-2xl border border-slate-200/90 bg-white/98 p-3.5 shadow-2xl backdrop-blur-xl dark:border-slate-700/90 dark:bg-sumi-900/98"
+            className="nq-dropdown-enter fixed left-3 right-3 top-16 z-[100] mx-auto max-w-md sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:mx-0 sm:w-[410px] sm:max-w-none rounded-2xl border-2 border-slate-200 bg-white p-3.5 shadow-[0_24px_60px_rgba(0,0,0,0.35)] dark:border-slate-700 dark:bg-sumi-900"
           >
             {/* Header */}
-            <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <span className="text-base">🔔</span>
-                <h4 className="font-extrabold text-sm text-slate-800 dark:text-slate-100">
+                <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">
                   {t("notifications")}
                 </h4>
                 {unreadCount > 0 && (
@@ -717,7 +724,7 @@ export function NotificationDropdown() {
                   <button
                     type="button"
                     onClick={handleDeleteAllRead}
-                    className="rounded-lg px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 transition"
+                    className="rounded-lg px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950 transition"
                     title={nativeLanguage === "vi" ? "Xóa tất cả thông báo đã đọc" : "Delete all read notifications"}
                   >
                     🗑️ {nativeLanguage === "vi" ? `Xóa đã đọc (${readCount})` : `Clear read (${readCount})`}
@@ -726,7 +733,7 @@ export function NotificationDropdown() {
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="sm:hidden inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500 dark:bg-sumi-800 dark:text-slate-300"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 hover:bg-slate-200 dark:bg-sumi-800 dark:text-slate-300 dark:hover:bg-sumi-700 transition"
                   aria-label="Đóng"
                 >
                   ✕
@@ -734,8 +741,8 @@ export function NotificationDropdown() {
               </div>
             </div>
 
-            {/* Device OS Notification & Custom Nihon Quest Chime Banner */}
-            <div className="mb-2.5 p-2.5 rounded-xl border transition-all text-xs bg-gradient-to-br from-red-50/60 via-white to-amber-50/40 dark:from-sumi-950 dark:via-sumi-900 dark:to-red-950/25 border-slate-200/80 dark:border-slate-800">
+            {/* Device OS Notification & Custom Nihon Quest Chime Banner (Solid Opaque) */}
+            <div className="mb-2.5 p-2.5 rounded-xl border text-xs bg-slate-50 dark:bg-sumi-950 border-slate-200 dark:border-slate-800">
               {devicePermission === "granted" ? (
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="min-w-0">
@@ -758,7 +765,7 @@ export function NotificationDropdown() {
                 </div>
               ) : (
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium leading-snug">
+                  <div className="text-[11px] text-slate-700 dark:text-slate-200 font-medium leading-snug">
                     {devicePermission === "denied"
                       ? nativeLanguage === "vi"
                         ? "Quyền thông báo đang bị chặn. Bấm để bật lại:"
@@ -778,7 +785,7 @@ export function NotificationDropdown() {
               )}
 
               {/* Custom Nihon Quest Chime Selector for Incoming Push Alerts */}
-              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800">
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
                 <div className="flex items-center justify-between gap-1 mb-1.5">
                   <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
                     🎐 {nativeLanguage === "vi" ? "Chuông riêng khi có thông báo tới:" : "Custom notification chime:"}
@@ -807,7 +814,7 @@ export function NotificationDropdown() {
                         className={`rounded-lg px-2 py-1 text-[10px] font-bold transition text-center truncate border ${
                           active
                             ? "bg-red-600 text-white border-red-600 shadow-xs"
-                            : "bg-white/90 dark:bg-sumi-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-red-300"
+                            : "bg-white dark:bg-sumi-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-red-300"
                         }`}
                       >
                         {sItem.emoji}{" "}
@@ -824,7 +831,7 @@ export function NotificationDropdown() {
             </div>
 
             {/* Filter Tabs + Clear All Bar */}
-            <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="mb-2.5 flex items-center justify-between gap-2">
               <div className="inline-flex rounded-xl bg-slate-100 dark:bg-sumi-800 p-0.5 text-[11px] font-bold">
                 <button
                   type="button"
@@ -871,10 +878,10 @@ export function NotificationDropdown() {
               )}
             </div>
 
-            {/* Notification List */}
+            {/* Notification List (Solid Opaque Cards) */}
             <div className="max-h-[55dvh] sm:max-h-80 overflow-y-auto space-y-2 pr-0.5">
               {displayedNotifications.length === 0 ? (
-                <div className="py-8 px-4 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-sumi-950/30">
+                <div className="py-8 px-4 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-sumi-950">
                   <div className="text-2xl mb-1.5">✨</div>
                   <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     {filterTab === "UNREAD"
@@ -920,12 +927,12 @@ export function NotificationDropdown() {
                           : "nq-notif-item-enter hover:-translate-y-0.5 hover:shadow-md"
                       } ${
                         isRead
-                          ? "bg-slate-50/70 dark:bg-sumi-950/40 border-slate-100 dark:border-slate-800/80 opacity-75"
+                          ? "bg-slate-100 dark:bg-sumi-950 border-slate-200 dark:border-slate-800"
                           : isPriority
-                            ? "bg-red-50/75 dark:bg-red-950/35 border-red-200 dark:border-red-900/60 shadow-xs ring-1 ring-red-400/30"
+                            ? "bg-red-50 dark:bg-[#2a1217] border-red-200 dark:border-red-900 shadow-xs ring-1 ring-red-400/40"
                             : isLesson
-                              ? "bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/50 shadow-xs"
-                              : "bg-white dark:bg-sumi-800/90 border-slate-200/80 dark:border-slate-700 shadow-sm"
+                              ? "bg-amber-50 dark:bg-[#261d10] border-amber-200 dark:border-amber-900 shadow-xs"
+                              : "bg-white dark:bg-sumi-800 border-slate-200 dark:border-slate-700 shadow-sm"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-1.5">
@@ -936,7 +943,7 @@ export function NotificationDropdown() {
                           <h5
                             className={`font-bold text-xs leading-snug truncate ${
                               isRead
-                                ? "text-slate-600 dark:text-slate-400"
+                                ? "text-slate-500 dark:text-slate-400"
                                 : isPriority
                                   ? "text-red-700 dark:text-red-300"
                                   : isLesson
@@ -950,14 +957,14 @@ export function NotificationDropdown() {
 
                         {/* Time badge + Mark Read + Delete buttons */}
                         <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-[10px] text-slate-400 font-semibold px-1.5 py-0.5 rounded-md bg-white/70 dark:bg-sumi-900/60">
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-sumi-900">
                             {item.time}
                           </span>
                           {!isRead && (
                             <button
                               type="button"
                               onClick={() => handleMarkOneRead(item.id)}
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-400 transition"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold text-slate-400 hover:bg-emerald-100 hover:text-emerald-700 dark:hover:bg-emerald-950 dark:hover:text-emerald-400 transition"
                               title={nativeLanguage === "vi" ? "Đánh dấu đã đọc" : "Mark as read"}
                             >
                               ✓
@@ -966,7 +973,7 @@ export function NotificationDropdown() {
                           <button
                             type="button"
                             onClick={() => handleDeleteOne(item.id)}
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 transition"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold text-slate-400 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-950 dark:hover:text-rose-400 transition"
                             title={nativeLanguage === "vi" ? "Xóa thông báo này" : "Delete notification"}
                           >
                             ✕

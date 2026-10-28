@@ -256,7 +256,7 @@ export function AppNav({
       {/* Thanh trên: logo + hành động. Link chính chỉ hiện từ xl trở lên;
           dưới đó dùng tab bar đáy màn hình + drawer. */}
       <header
-        className="sticky z-40 px-2 sm:px-6"
+        className="sticky z-50 px-2 sm:px-6"
         style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
         data-intro
       >
