@@ -23,7 +23,7 @@
 
   position: relative;
   min-height: 100vh;
-  padding: 12px 20px 64px;
+  padding: 12px 20px calc(96px + env(safe-area-inset-bottom));
   background: var(--nqp-bg);
   font-family: var(--font-be-vietnam), "Be Vietnam Pro", system-ui, sans-serif;
   color: var(--nqp-ink);
@@ -529,7 +529,7 @@
   }
 }
 @media (max-width: 640px) {
-  .nqp { padding: 10px 12px 48px; }
+  .nqp { padding: 10px 12px calc(96px + env(safe-area-inset-bottom)); }
   .nqp-hero { border-radius: 22px; }
   .nqp-hero-main { padding: 26px 20px; }
   .nqp-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }

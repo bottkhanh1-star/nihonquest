@@ -208,9 +208,9 @@ export function QuickSettingsDrawer({
               </button>
             </div>
 
-            {/* 3. Âm thanh hiệu ứng */}
-            <div>
-              <span className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+            {/* 3. Âm thanh hiệu ứng & Thông báo thiết bị */}
+            <div className="space-y-2.5">
+              <span className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 {t("soundFxTitle")}
               </span>
               <button
@@ -224,7 +224,7 @@ export function QuickSettingsDrawer({
                 className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-200 dark:border-sumi-800 bg-slate-50 dark:bg-sumi-950 text-slate-800 dark:text-slate-200 font-bold text-xs"
               >
                 <div className="flex items-center gap-2">
-                  <span>{soundEnabled ? "🔔" : "🔕"}</span>
+                  <span>{soundEnabled ? "🔊" : "🔇"}</span>
                   <span>{t("soundFx")}</span>
                 </div>
                 <span
@@ -237,6 +237,30 @@ export function QuickSettingsDrawer({
                       soundEnabled ? "left-5" : "left-0.5"
                     }`}
                   />
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  onClose();
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent("nq:open-notifications"));
+                  }, 100);
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-2xl border border-red-200 dark:border-red-900/60 bg-red-50/80 dark:bg-red-950/40 text-red-700 dark:text-red-300 font-extrabold text-xs transition active:scale-95"
+              >
+                <div className="flex items-center gap-2">
+                  <span>🔔</span>
+                  <span>
+                    {nativeLanguage === "vi"
+                      ? "Thông báo thiết bị (Tin nhắn, Cuộc gọi & Streak)"
+                      : "Device Notifications (Calls, Messages & Streak)"}
+                  </span>
+                </div>
+                <span className="text-[11px] underline">
+                  {nativeLanguage === "vi" ? "Mở" : "Open"} ›
                 </span>
               </button>
             </div>

@@ -109,7 +109,7 @@ function Avatar({ name, image }: { name?: string | null; image?: string | null }
     <UserAvatar
       src={image}
       name={name}
-      sizeClass="h-10 w-10 text-sm"
+      sizeClass="h-9 w-9 sm:h-10 sm:w-10 text-xs sm:text-sm"
       className="bg-gradient-to-br from-slate-800 to-red-900 ring-2 ring-white dark:ring-sumi-800"
       imgClassName="ring-2 ring-white dark:ring-sumi-800"
     />
@@ -336,15 +336,15 @@ export function AppNav({
             </div>
           </nav>
 
-          <div className="ml-auto flex items-center gap-1 sm:gap-2">
-            {/* Seasonal Badge Pill (Desktop, Tablet & Wide Mobile) */}
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+            {/* Seasonal Badge Pill (Desktop & Tablet) */}
             <button
               type="button"
               onClick={() => {
                 playClick();
                 setQuickSettingsOpen(true);
               }}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-black transition active:scale-95 hover:opacity-90 max-[420px]:hidden shadow-xs whitespace-nowrap"
+              className="hidden sm:inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-black transition active:scale-95 hover:opacity-90 shadow-xs whitespace-nowrap"
               style={{
                 borderColor: `${seasonConfig.colorHex}50`,
                 backgroundColor: `${seasonConfig.colorHex}15`,
@@ -569,17 +569,17 @@ export function AppNav({
               <Icon name={resolvedTheme === "dark" ? "moon" : "sun"} className="h-[18px] w-[18px]" />
             </IconButton>
 
-            {/* Direct Desktop Chat / Messages Button */}
+            {/* Direct Chat / Messages Button (Visible on Mobile, Tablet & Desktop) */}
             <Link
               href="/app/messages"
               onClick={playClick}
-              className={`relative hidden md:inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition hover:border-slate-300 active:scale-95 dark:border-slate-700 dark:bg-sumi-900 dark:text-slate-200 ${
+              className={`relative inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition hover:border-slate-300 active:scale-95 dark:border-slate-700 dark:bg-sumi-900 dark:text-slate-200 ${
                 active("/app/messages") ? "ring-2 ring-red-500 text-red-600 dark:text-red-400" : ""
               }`}
               title={t("navMessages") || "Nhắn tin & Bạn bè"}
               aria-label={t("navMessages") || "Nhắn tin & Bạn bè"}
             >
-              <span className="text-base">💬</span>
+              <span className="text-sm sm:text-base">💬</span>
               {unreadMessagesCount > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white ring-2 ring-white dark:ring-sumi-900 animate-pulse">
                   {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
@@ -952,6 +952,24 @@ export function AppNav({
                     </span>
                   )}
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClick();
+                    setMobileOpen(false);
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent("nq:open-notifications"));
+                    }, 100);
+                  }}
+                  className="col-span-2 flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50/80 px-3 py-2.5 text-xs font-extrabold text-red-700 transition active:scale-95 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+                >
+                  <span>🔔</span>
+                  <span>
+                    {nativeLanguage === "vi"
+                      ? "Thông báo & Nhắc học trên thiết bị"
+                      : "Device Notifications & Study Reminders"}
+                  </span>
+                </button>
                 <div className="col-span-2 mt-1">
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
                     {t("nativeLangTitle")}

@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { action, callId, receiverId, callType, offerSdp, answerSdp, candidate } = body;
+    const { action, callId, receiverId, callType, offerSdp, answerSdp } = body;
 
     if (action === "initiate") {
       if (!receiverId) {
@@ -118,12 +118,18 @@ export async function POST(request: Request) {
         data: { status: "ENDED" },
       });
 
+      const isVideoInit = callType === "VIDEO";
+      const initialCallerMeta = JSON.stringify([
+        { __meta: true, videoOn: isVideoInit, audioOn: true, ts: Date.now() },
+      ]);
+
       const call = await prisma.callSession.create({
         data: {
           callerId: userId,
           receiverId,
-          callType: callType === "VIDEO" ? "VIDEO" : "AUDIO",
+          callType: isVideoInit ? "VIDEO" : "AUDIO",
           offerSdp: offerSdp || null,
+          callerIce: initialCallerMeta,
           status: "RINGING",
         },
         include: {
@@ -148,7 +154,7 @@ export async function POST(request: Request) {
           const callerName = caller?.profile?.displayName || caller?.name || "Bạn bè";
           await sendPushToUser(receiverId, {
             title: `📞 Cuộc gọi đến từ ${callerName}`,
-            body: `Đang gọi ${callType === "VIDEO" ? "video" : "thoại"} cho bạn. Nhấn để tham gia ngay!`,
+            body: `Đang gọi ${isVideoInit ? "video" : "thoại"} cho bạn. Nhấn để tham gia ngay!`,
             url: `/app/messages?friendId=${userId}&callId=${call.id}`,
             tag: `call-${call.id}`,
           });
@@ -166,13 +172,17 @@ export async function POST(request: Request) {
       }
 
       const call = await prisma.callSession.findUnique({ where: { id: callId } });
-      if (!call || call.callerId !== userId) {
+      if (!call || (call.callerId !== userId && call.receiverId !== userId)) {
         return NextResponse.json({ error: "Call session not found" }, { status: 404 });
       }
 
       const updated = await prisma.callSession.update({
         where: { id: callId },
-        data: { offerSdp },
+        data: {
+          offerSdp,
+          // When either peer provides an offer (initial or renegotiation), clear answerSdp for a fresh answer
+          answerSdp: null,
+        },
       });
 
       return NextResponse.json({ call: updated });
@@ -184,7 +194,7 @@ export async function POST(request: Request) {
       }
 
       const call = await prisma.callSession.findUnique({ where: { id: callId } });
-      if (!call || call.receiverId !== userId) {
+      if (!call || (call.callerId !== userId && call.receiverId !== userId)) {
         return NextResponse.json({ error: "Call session not found" }, { status: 404 });
       }
 
@@ -193,57 +203,90 @@ export async function POST(request: Request) {
         data: {
           status: "ACCEPTED",
           answerSdp,
-          startedAt: new Date(),
+          startedAt: call.startedAt || new Date(),
         },
       });
 
       return NextResponse.json({ call: updated });
     }
 
-    if (action === "ice" || action === "ice-batch") {
+    if (action === "ice" || action === "ice-batch" || action === "media-state") {
       if (!callId) return NextResponse.json({ error: "Missing callId" }, { status: 400 });
 
-      const candidatesToAdd: any[] = action === "ice-batch"
-        ? (Array.isArray(body.candidates) ? body.candidates : [])
-        : (body.candidate ? [body.candidate] : []);
-
-      if (candidatesToAdd.length === 0) {
-        return NextResponse.json({ success: true, count: 0 });
+      const call = await prisma.callSession.findUnique({ where: { id: callId } });
+      if (!call || (call.callerId !== userId && call.receiverId !== userId)) {
+        return NextResponse.json({ error: "Call not found" }, { status: 404 });
       }
 
-      const call = await prisma.callSession.findUnique({ where: { id: callId } });
-      if (!call) return NextResponse.json({ error: "Call not found" }, { status: 404 });
-
       const isCaller = call.callerId === userId;
-      const currentList: any[] = JSON.parse(
-        (isCaller ? call.callerIce : call.receiverIce) || "[]"
-      );
+      let currentList: any[] = [];
+      try {
+        currentList = JSON.parse((isCaller ? call.callerIce : call.receiverIce) || "[]");
+      } catch {
+        currentList = [];
+      }
+
+      let changed = false;
+
+      if (typeof body.videoOn === "boolean" || typeof body.audioOn === "boolean") {
+        const existingMeta = currentList.find((c) => c && c.__meta === true);
+        const nextMeta = {
+          __meta: true,
+          videoOn: typeof body.videoOn === "boolean" ? body.videoOn : (existingMeta?.videoOn ?? false),
+          audioOn: typeof body.audioOn === "boolean" ? body.audioOn : (existingMeta?.audioOn ?? true),
+          ts: Date.now(),
+        };
+        currentList = currentList.filter((c) => !c || c.__meta !== true);
+        currentList.push(nextMeta);
+        changed = true;
+      }
+
+      const candidatesToAdd: any[] =
+        action === "ice-batch"
+          ? Array.isArray(body.candidates)
+            ? body.candidates
+            : []
+          : body.candidate
+            ? [body.candidate]
+            : [];
 
       const existingSet = new Set(
-        currentList.map((c) =>
-          typeof c === "string" ? c : `${c.candidate || ""}|${c.sdpMid || ""}|${c.sdpMLineIndex ?? ""}`
-        )
+        currentList
+          .filter((c) => c && !c.__meta)
+          .map((c) =>
+            typeof c === "string"
+              ? c
+              : `${c.candidate || ""}|${c.sdpMid || ""}|${c.sdpMLineIndex ?? ""}`
+          )
       );
 
       let added = 0;
       for (const cand of candidatesToAdd) {
-        if (!cand) continue;
-        const key = typeof cand === "string"
-          ? cand
-          : `${cand.candidate || ""}|${cand.sdpMid || ""}|${cand.sdpMLineIndex ?? ""}`;
+        if (!cand || cand.__meta) continue;
+        const key =
+          typeof cand === "string"
+            ? cand
+            : `${cand.candidate || ""}|${cand.sdpMid || ""}|${cand.sdpMLineIndex ?? ""}`;
         if (!existingSet.has(key)) {
           existingSet.add(key);
           currentList.push(cand);
           added++;
+          changed = true;
         }
       }
 
-      if (added > 0) {
+      if (changed || body.offerSdp) {
         await prisma.callSession.update({
           where: { id: callId },
-          data: isCaller
-            ? { callerIce: JSON.stringify(currentList) }
-            : { receiverIce: JSON.stringify(currentList) },
+          data: {
+            ...(changed
+              ? isCaller
+                ? { callerIce: JSON.stringify(currentList) }
+                : { receiverIce: JSON.stringify(currentList) }
+              : {}),
+            ...(body.videoOn === true && call.callType !== "VIDEO" ? { callType: "VIDEO" } : {}),
+            ...(body.offerSdp ? { offerSdp: body.offerSdp, answerSdp: null } : {}),
+          },
         });
       }
 
@@ -258,11 +301,34 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Call not found" }, { status: 404 });
       }
 
+      const isCaller = call.callerId === userId;
+      let currentList: any[] = [];
+      try {
+        currentList = JSON.parse((isCaller ? call.callerIce : call.receiverIce) || "[]");
+      } catch {
+        currentList = [];
+      }
+      if (typeof body.videoOn === "boolean") {
+        const existingMeta = currentList.find((c) => c && c.__meta === true);
+        currentList = currentList.filter((c) => !c || c.__meta !== true);
+        currentList.push({
+          __meta: true,
+          videoOn: body.videoOn,
+          audioOn: existingMeta?.audioOn ?? true,
+          ts: Date.now(),
+        });
+      }
+
       const updated = await prisma.callSession.update({
         where: { id: callId },
         data: {
           callType: "VIDEO",
-          ...(offerSdp ? { offerSdp } : {}),
+          ...(typeof body.videoOn === "boolean"
+            ? isCaller
+              ? { callerIce: JSON.stringify(currentList) }
+              : { receiverIce: JSON.stringify(currentList) }
+            : {}),
+          ...(offerSdp ? { offerSdp, answerSdp: null } : {}),
         },
       });
 
@@ -315,4 +381,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to process call action" }, { status: 500 });
   }
 }
-

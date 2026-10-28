@@ -21,10 +21,8 @@ function getPrismaClientConstructor(): any {
 
 function createPrismaClient(): PrismaClientType {
   const ClientConstructor = getPrismaClientConstructor();
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    return new ClientConstructor();
-  }
+  const connectionString =
+    process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/nihonquest";
 
   try {
     const isServerless = process.env.NODE_ENV === "production" || process.env.NETLIFY === "true";

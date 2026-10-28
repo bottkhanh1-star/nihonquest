@@ -230,10 +230,15 @@ export default async function AppHome() {
     .filter((m) => m.slug)
     .map((m) => m.slug!)
     .filter((s, i, arr) => arr.indexOf(s) === i);
-  const pathLessons = await prisma.lesson.findMany({
-    where: { slug: { in: pathSlugs }, isPublished: true },
-    select: { slug: true, title: true, progress: { where: { userId: uid } } },
-  });
+  let pathLessons: { slug: string; title: string; progress: { status: string }[] }[] = [];
+  try {
+    pathLessons = await prisma.lesson.findMany({
+      where: { slug: { in: pathSlugs }, isPublished: true },
+      select: { slug: true, title: true, progress: { where: { userId: uid } } },
+    });
+  } catch (err) {
+    console.warn("[AppHome] pathLessons query warning:", err);
+  }
   const pathDone = new Set(
     pathLessons.filter((l) => l.progress[0]?.status === "COMPLETED").map((l) => l.slug),
   );

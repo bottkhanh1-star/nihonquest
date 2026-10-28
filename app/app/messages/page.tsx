@@ -609,12 +609,12 @@ function MessagesAndFriendsContent() {
   };
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-sumi-950 dark:text-slate-100">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-sumi-950 dark:text-slate-100">
       <AppNav />
 
-      {/* Main Responsive Chat Layout: accounts for mobile bottom bar on phone */}
-      <div className="mx-auto flex h-[calc(100dvh-136px)] md:h-[calc(100vh-85px)] w-full max-w-7xl flex-1 overflow-hidden px-2 pb-1 md:px-6 md:pb-4">
-        <div className="flex h-full w-full overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-xl dark:border-slate-800 dark:bg-sumi-900">
+      {/* Main Responsive Chat Layout: accounts for mobile/tablet bottom bar (< xl) */}
+      <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 overflow-hidden px-2 pt-3 pb-[calc(66px+env(safe-area-inset-bottom))] sm:px-4 md:px-6 xl:pb-4">
+        <div className="flex h-full w-full overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white shadow-xl dark:border-slate-800 dark:bg-sumi-900">
           {/* =========================================================================
               LEFT COLUMN: Friends, Requests & Search
               ========================================================================= */}
@@ -970,12 +970,12 @@ function MessagesAndFriendsContent() {
             {selectedFriend ? (
               <>
                 {/* Chat Top Header */}
-                <div className="flex items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur-md dark:border-slate-800 dark:bg-sumi-900/90">
-                  <div className="flex items-center gap-3">
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200/80 bg-white/90 px-3 py-2.5 sm:px-4 sm:py-3 backdrop-blur-md dark:border-slate-800 dark:bg-sumi-900/90">
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
                     {/* Back button on mobile */}
                     <button
                       onClick={() => setSelectedFriend(null)}
-                      className="mr-1 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 md:hidden dark:bg-sumi-800 dark:text-slate-300"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 md:hidden dark:bg-sumi-800 dark:text-slate-300"
                       title="Back"
                     >
                       ❮
@@ -983,24 +983,24 @@ function MessagesAndFriendsContent() {
                     <UserAvatar
                       src={selectedFriend.avatar}
                       name={selectedFriend.name}
-                      sizeClass="h-10 w-10 text-sm"
+                      sizeClass="h-9 w-9 sm:h-10 sm:w-10 text-sm shrink-0"
                     />
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-sm font-bold text-slate-900 dark:text-white">
                         {selectedFriend.name}
                       </h3>
-                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-slate-500">
                         <span className="font-extrabold text-red-600 dark:text-red-400">
                           {selectedFriend.learningLevel || "N5"}
                         </span>
                         <span>•</span>
-                        <span className="text-emerald-600 dark:text-emerald-400">✓ {s.tabFriends}</span>
+                        <span className="truncate text-emerald-600 dark:text-emerald-400">✓ {s.tabFriends}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Call Actions */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                     <button
                       onClick={() =>
                         startCall(

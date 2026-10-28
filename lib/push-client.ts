@@ -21,30 +21,61 @@ export function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 /**
- * Register Service Worker and subscribe user to Web Push Notifications
- * Works across desktop and mobile browsers even when tab is closed.
+ * Register Service Worker and subscribe user to Web Push Notifications.
+ * IMPORTANT: Call Notification.requestPermission() FIRST before awaiting ServiceWorker
+ * so mobile browsers (Android Chrome / iOS Safari) preserve the transient user gesture!
  */
 export async function registerPushSubscription(): Promise<{
   success: boolean;
   error?: string;
   subscription?: PushSubscription;
+  fallbackMode?: boolean;
 }> {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-    return { success: false, error: "Push notifications are not supported on this browser." };
+  if (typeof window === "undefined") {
+    return { success: false, error: "Window unavailable" };
   }
 
   try {
-    // 1. Register service worker
+    // 1. MUST request Notification permission FIRST on user tap (preserves mobile user gesture!)
+    if ("Notification" in window) {
+      const currentPerm = Notification.permission;
+      if (currentPerm !== "granted") {
+        const requested = await Notification.requestPermission();
+        if (requested !== "granted") {
+          return {
+            success: false,
+            error:
+              requested === "denied"
+                ? "Notification permission was denied."
+                : "Notification permission was dismissed.",
+          };
+        }
+      }
+    } else {
+      // Mobile browser without window.Notification (e.g. iOS Safari tab before Add to Home Screen)
+      // Enable local/in-app notification preference so user still gets alerts
+      try {
+        localStorage.setItem("nq_inapp_notifications_enabled", "true");
+      } catch {}
+      return {
+        success: true,
+        fallbackMode: true,
+      };
+    }
+
+    // 2. Register Service Worker if supported
+    if (!("serviceWorker" in navigator)) {
+      return { success: true, fallbackMode: true };
+    }
+
     const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
     await navigator.serviceWorker.ready;
 
-    // 2. Request notification permission if not yet granted
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      return { success: false, error: "Notification permission was denied." };
+    // 3. Subscribe via PushManager if available
+    if (!("PushManager" in window) || !registration.pushManager) {
+      return { success: true, fallbackMode: true };
     }
 
-    // 3. Get existing or subscribe to new push subscription
     let subscription = await registration.pushManager.getSubscription();
 
     if (!subscription) {
@@ -55,7 +86,7 @@ export async function registerPushSubscription(): Promise<{
       });
     }
 
-    // 4. Save to backend database
+    // 4. Save subscription to backend database
     const res = await fetch("/api/push/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -71,7 +102,12 @@ export async function registerPushSubscription(): Promise<{
 
     return { success: true, subscription };
   } catch (err: any) {
-    console.error("[PushClient] Error subscribing to push:", err);
+    console.warn("[PushClient] Push subscription warning:", err);
+    // If browser granted Notification permission even though PushManager failed (e.g. local HTTP on mobile),
+    // still return success so local/SW notifications work!
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      return { success: true, fallbackMode: true };
+    }
     return { success: false, error: err?.message || "Unknown error" };
   }
 }
