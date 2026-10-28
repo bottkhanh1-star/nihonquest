@@ -116,7 +116,34 @@ export async function POST(
         },
       });
 
-      return NextResponse.json({ success: true, participant, room });
+      const updatedRoom = await prisma.groupCallRoom.findUnique({
+        where: { code },
+        include: {
+          host: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+              profile: { select: { displayName: true, avatar: true } },
+            },
+          },
+          participants: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  image: true,
+                  profile: { select: { displayName: true, avatar: true } },
+                },
+              },
+            },
+            orderBy: { joinedAt: "asc" },
+          },
+        },
+      });
+
+      return NextResponse.json({ success: true, participant, room: updatedRoom });
     }
 
     // ACTION: LEAVE

@@ -259,12 +259,12 @@ export default function StudyRoomsPage() {
                       {/* Host Info */}
                       <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
                         <UserAvatar
-                          src={room.host.profile?.avatar || room.host.image}
-                          name={room.host.profile?.displayName || room.host.name}
+                          src={room.host?.profile?.avatar || room.host?.image}
+                          name={room.host?.profile?.displayName || room.host?.name || "Bạn học"}
                           sizeClass="h-5 w-5 text-[10px]"
                         />
                         <span className="truncate">
-                          Tạo bởi: {room.host.profile?.displayName || room.host.name || "Bạn học"}
+                          Tạo bởi: {room.host?.profile?.displayName || room.host?.name || "Bạn học"}
                         </span>
                       </div>
 
@@ -272,11 +272,11 @@ export default function StudyRoomsPage() {
                       <div className="mt-4 flex items-center gap-1.5">
                         <span className="text-[11px] text-slate-400 mr-1">Thành viên:</span>
                         <div className="flex -space-x-2">
-                          {room.participants.slice(0, 4).map((p) => (
+                          {(room.participants || []).slice(0, 4).map((p) => (
                             <UserAvatar
                               key={p.userId}
-                              src={p.user.profile?.avatar || p.user.image}
-                              name={p.user.profile?.displayName || p.user.name}
+                              src={p.user?.profile?.avatar || p.user?.image}
+                              name={p.user?.profile?.displayName || p.user?.name || "Bạn học"}
                               sizeClass="h-7 w-7 text-xs ring-2 ring-[#161d24]"
                             />
                           ))}

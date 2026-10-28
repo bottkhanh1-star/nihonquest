@@ -13,25 +13,25 @@ export interface GroupRoomData {
   hostId: string;
   isPrivate: boolean;
   maxMembers: number;
-  host: {
+  host?: {
     id: string;
-    name: string | null;
-    image: string | null;
+    name?: string | null;
+    image?: string | null;
     profile?: { displayName: string | null; avatar: string | null } | null;
-  };
+  } | null;
   participants: {
     id: string;
     userId: string;
     peerId: string;
-    isAudioMuted: boolean;
-    isVideoOff: boolean;
-    isScreenSharing: boolean;
-    user: {
+    isAudioMuted?: boolean;
+    isVideoOff?: boolean;
+    isScreenSharing?: boolean;
+    user?: {
       id: string;
-      name: string | null;
-      image: string | null;
+      name?: string | null;
+      image?: string | null;
       profile?: { displayName: string | null; avatar: string | null } | null;
-    };
+    } | null;
   }[];
 }
 
@@ -530,7 +530,7 @@ export function GroupCallModal({
           {/* 2. Remote Members Video Tiles */}
           {otherMembers.map((member) => {
             const displayName =
-              member.user.profile?.displayName || member.user.name || "Bạn học";
+              member.user?.profile?.displayName || member.user?.name || "Bạn học";
             return (
               <div
                 key={member.userId}
@@ -553,7 +553,7 @@ export function GroupCallModal({
                 {member.isVideoOff && (
                   <div className="flex flex-col items-center gap-2">
                     <UserAvatar
-                      src={member.user.profile?.avatar || member.user.image}
+                      src={member.user?.profile?.avatar || member.user?.image}
                       name={displayName}
                       sizeClass="h-16 w-16 text-xl"
                     />
