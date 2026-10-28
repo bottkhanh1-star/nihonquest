@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useNativeLanguage } from "@/components/LanguageContext";
 import { getSocialTranslation } from "@/lib/socialI18n";
+import { playNihonQuestChime } from "@/lib/nihonChime";
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
@@ -291,15 +292,14 @@ export function WebRTCCallModal({
     }
   }, [activeCall?.isCaller, activeCall?.status, activeCall?.callId, terminateCallWithSound]);
 
-  // 1. Incoming Call Ringtone
+  // 1. Incoming Call Ringtone (Signature Nihon Quest Koto & Fūrin Melody)
   useEffect(() => {
     if (!incomingCall || activeCall) return;
     const ring = () => {
-      playTone(523.25, "sine", 350);
-      setTimeout(() => playTone(659.25, "sine", 400), 180);
+      playNihonQuestChime("call");
     };
     ring();
-    const interval = setInterval(ring, 2400);
+    const interval = setInterval(ring, 2600);
     return () => clearInterval(interval);
   }, [incomingCall, activeCall]);
 
@@ -320,8 +320,7 @@ export function WebRTCCallModal({
       setCallDuration(0);
       return;
     }
-    playTone(440, "triangle", 150);
-    setTimeout(() => playTone(880, "triangle", 300), 160);
+    playNihonQuestChime("connect");
 
     const interval = setInterval(() => {
       setCallDuration((prev) => prev + 1);

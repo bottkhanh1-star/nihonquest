@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/web-push";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,7 @@ export async function GET(request: Request) {
         currentStreak: otherUser.currentStreak,
         totalXP: otherUser.totalXP,
         lastActivityAt: otherUser.lastActivityAt,
+        updatedAt: f.updatedAt,
         status: f.status,
       };
 
@@ -219,6 +221,23 @@ export async function POST(request: Request) {
               where: { id: existing.id },
               data: { status: "ACCEPTED" },
             });
+            (async () => {
+              try {
+                const me = await prisma.user.findUnique({
+                  where: { id: userId },
+                  select: { name: true, profile: { select: { displayName: true } } },
+                });
+                const myName = me?.profile?.displayName || me?.name || "Học viên";
+                await sendPushToUser(targetUserId, {
+                  title: "🌸 Đã trở thành bạn bè!",
+                  body: `${myName} đã đồng ý kết bạn trên Nihon Quest. Hãy nhắn tin hoặc gọi điện luyện nói ngay!`,
+                  url: `/app/messages?friendId=${userId}`,
+                  tag: `friend-accept-${userId}`,
+                });
+              } catch (pushErr) {
+                console.warn("[/api/friends] Push error:", pushErr);
+              }
+            })();
             return NextResponse.json({ message: "Friend request accepted", friendship: updated });
           }
           return NextResponse.json({ message: "Friend request already sent", status: "PENDING" });
@@ -228,6 +247,23 @@ export async function POST(request: Request) {
           where: { id: existing.id },
           data: { userId, friendId: targetUserId, status: "PENDING" },
         });
+        (async () => {
+          try {
+            const me = await prisma.user.findUnique({
+              where: { id: userId },
+              select: { name: true, profile: { select: { displayName: true } } },
+            });
+            const myName = me?.profile?.displayName || me?.name || "Học viên";
+            await sendPushToUser(targetUserId, {
+              title: "🤝 Lời mời kết bạn mới!",
+              body: `${myName} muốn kết bạn và cùng học tiếng Nhật với bạn trên Nihon Quest!`,
+              url: `/app/messages?tab=REQUESTS`,
+              tag: `friend-req-${userId}`,
+            });
+          } catch (pushErr) {
+            console.warn("[/api/friends] Push error:", pushErr);
+          }
+        })();
         return NextResponse.json({ message: "Friend request sent", friendship: updated });
       }
 
@@ -238,6 +274,25 @@ export async function POST(request: Request) {
           status: "PENDING",
         },
       });
+
+      // Dispatch Web Push notification to targetUserId
+      (async () => {
+        try {
+          const me = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true, profile: { select: { displayName: true } } },
+          });
+          const myName = me?.profile?.displayName || me?.name || "Học viên";
+          await sendPushToUser(targetUserId, {
+            title: "🤝 Lời mời kết bạn mới!",
+            body: `${myName} muốn kết bạn và cùng học tiếng Nhật với bạn trên Nihon Quest!`,
+            url: `/app/messages?tab=REQUESTS`,
+            tag: `friend-req-${userId}`,
+          });
+        } catch (pushErr) {
+          console.warn("[/api/friends] Push error:", pushErr);
+        }
+      })();
 
       return NextResponse.json({ message: "Friend request sent", friendship: created });
     }
@@ -256,6 +311,25 @@ export async function POST(request: Request) {
         where: { id: friendshipId },
         data: { status: "ACCEPTED" },
       });
+
+      // Notify requester that their friend request was accepted
+      (async () => {
+        try {
+          const me = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true, profile: { select: { displayName: true } } },
+          });
+          const myName = me?.profile?.displayName || me?.name || "Học viên";
+          await sendPushToUser(req.userId, {
+            title: "🌸 Đã trở thành bạn bè!",
+            body: `${myName} đã đồng ý lời mời kết bạn! Hãy nhắn tin hoặc gọi điện luyện tiếng Nhật ngay!`,
+            url: `/app/messages?friendId=${userId}`,
+            tag: `friend-accept-${userId}`,
+          });
+        } catch (pushErr) {
+          console.warn("[/api/friends] Push error:", pushErr);
+        }
+      })();
 
       return NextResponse.json({ message: "Friend request accepted", friendship: updated });
     }

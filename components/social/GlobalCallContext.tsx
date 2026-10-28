@@ -1,9 +1,10 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { WebRTCCallModal, ActiveCallState } from "./WebRTCCallModal";
 import { useNativeLanguage } from "@/components/LanguageContext";
 import { getSocialTranslation } from "@/lib/socialI18n";
+import { playNihonQuestChime } from "@/lib/nihonChime";
 
 interface IncomingCallData {
   id: string;
@@ -13,6 +14,32 @@ interface IncomingCallData {
     avatar?: string | null;
   };
   callType: "AUDIO" | "VIDEO";
+}
+
+export interface UnreadConversationSummary {
+  friend: {
+    id: string;
+    name: string;
+    avatar?: string | null;
+    learningLevel?: string | null;
+  };
+  lastMessage: {
+    id: string;
+    content: string;
+    senderId: string;
+    createdAt: string;
+    isRead: boolean;
+  } | null;
+  unreadCount: number;
+}
+
+export interface IncomingFriendRequestSummary {
+  friendshipId: string;
+  userId: string;
+  name: string;
+  avatar?: string | null;
+  learningLevel?: string | null;
+  updatedAt?: string;
 }
 
 interface CallContextType {
@@ -26,6 +53,11 @@ interface CallContextType {
   ) => Promise<void>;
   endCall: (callId?: string) => Promise<void>;
   unreadMessagesCount: number;
+  unreadConversations: UnreadConversationSummary[];
+  latestConversation: UnreadConversationSummary | null;
+  incomingFriendRequests: IncomingFriendRequestSummary[];
+  recentFriends: IncomingFriendRequestSummary[];
+  acceptFriendRequest: (friendshipId: string) => Promise<boolean>;
   refreshUnreadCount: () => Promise<void>;
 }
 
@@ -38,6 +70,13 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
   const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null);
   const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
+  const [unreadConversations, setUnreadConversations] = useState<UnreadConversationSummary[]>([]);
+  const [latestConversation, setLatestConversation] = useState<UnreadConversationSummary | null>(null);
+  const [incomingFriendRequests, setIncomingFriendRequests] = useState<IncomingFriendRequestSummary[]>([]);
+  const [recentFriends, setRecentFriends] = useState<IncomingFriendRequestSummary[]>([]);
+
+  const prevUnreadRef = useRef<number | null>(null);
+  const prevFriendReqCountRef = useRef<number | null>(null);
 
   const handleStatusChange = useCallback((status: ActiveCallState["status"]) => {
     setActiveCall((prev) => (prev ? { ...prev, status } : null));
@@ -45,17 +84,74 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
 
   const refreshUnreadCount = useCallback(async () => {
     try {
-      const res = await fetch("/api/messages");
-      if (res.ok) {
-        const data = await res.json();
-        setUnreadMessagesCount(data.totalUnread || 0);
+      const [msgRes, friendsRes] = await Promise.all([
+        fetch("/api/messages").catch(() => null),
+        fetch("/api/friends").catch(() => null),
+      ]);
+
+      if (msgRes && msgRes.ok) {
+        const data = await msgRes.json();
+        const totalUnread = Number(data.totalUnread || 0);
+        const convs: UnreadConversationSummary[] = Array.isArray(data.conversations)
+          ? data.conversations
+          : [];
+
+        // Play Nihon Quest chime when a new unread message arrives after initial load
+        if (prevUnreadRef.current !== null && totalUnread > prevUnreadRef.current) {
+          playNihonQuestChime();
+        }
+        prevUnreadRef.current = totalUnread;
+
+        setUnreadMessagesCount(totalUnread);
+        setUnreadConversations(convs.filter((c) => c.unreadCount > 0));
+        setLatestConversation(convs.find((c) => c.lastMessage !== null) || convs[0] || null);
+      }
+
+      if (friendsRes && friendsRes.ok) {
+        const fData = await friendsRes.json();
+        const reqs: IncomingFriendRequestSummary[] = Array.isArray(fData.incomingRequests)
+          ? fData.incomingRequests
+          : [];
+        const accepted: IncomingFriendRequestSummary[] = Array.isArray(fData.friends)
+          ? fData.friends.slice(0, 3)
+          : [];
+
+        // Play Nihon Quest chime when a new friend request arrives after initial load
+        if (prevFriendReqCountRef.current !== null && reqs.length > prevFriendReqCountRef.current) {
+          playNihonQuestChime("furin");
+        }
+        prevFriendReqCountRef.current = reqs.length;
+
+        setIncomingFriendRequests(reqs);
+        setRecentFriends(accepted);
       }
     } catch {
       // ignore
     }
   }, []);
 
-  // Poll for incoming calls and unread messages periodically
+  const acceptFriendRequest = useCallback(
+    async (friendshipId: string): Promise<boolean> => {
+      try {
+        const res = await fetch("/api/friends", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "accept", friendshipId }),
+        });
+        if (res.ok) {
+          playNihonQuestChime("sakura");
+          await refreshUnreadCount();
+          return true;
+        }
+      } catch {
+        // ignore
+      }
+      return false;
+    },
+    [refreshUnreadCount]
+  );
+
+  // Poll for incoming calls, unread messages, and friend requests periodically
   useEffect(() => {
     let timer: NodeJS.Timeout;
 
@@ -69,8 +165,13 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
               id: data.incomingCall.id,
               caller: {
                 id: data.incomingCall.caller.id,
-                name: data.incomingCall.caller.profile?.displayName || data.incomingCall.caller.name || "Bạn học",
-                avatar: data.incomingCall.caller.profile?.avatar || data.incomingCall.caller.image,
+                name:
+                  data.incomingCall.caller.profile?.displayName ||
+                  data.incomingCall.caller.name ||
+                  "Bạn học",
+                avatar:
+                  data.incomingCall.caller.profile?.avatar ||
+                  data.incomingCall.caller.image,
               },
               callType: data.incomingCall.callType,
             });
@@ -89,7 +190,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
     timer = setInterval(() => {
       pollCalls();
       refreshUnreadCount();
-    }, 4000);
+    }, 4500);
 
     return () => clearInterval(timer);
   }, [refreshUnreadCount]);
@@ -194,6 +295,11 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
         startCall,
         endCall,
         unreadMessagesCount,
+        unreadConversations,
+        latestConversation,
+        incomingFriendRequests,
+        recentFriends,
+        acceptFriendRequest,
         refreshUnreadCount,
       }}
     >
@@ -217,4 +323,3 @@ export function useGlobalCall() {
   }
   return context;
 }
-

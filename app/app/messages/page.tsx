@@ -210,9 +210,34 @@ function MessagesAndFriendsContent() {
   const { startCall, refreshUnreadCount } = useGlobalCall();
   const searchParams = useSearchParams();
   const initialFriendId = searchParams.get("friendId");
+  const initialTab = searchParams.get("tab");
 
   // Navigation tab for sidebar
-  const [activeTab, setActiveTab] = useState<"CHATS" | "FRIENDS" | "REQUESTS" | "FIND">("CHATS");
+  const [activeTab, setActiveTab] = useState<"CHATS" | "FRIENDS" | "REQUESTS" | "FIND">(() => {
+    if (
+      initialTab === "REQUESTS" ||
+      initialTab === "FRIENDS" ||
+      initialTab === "FIND" ||
+      initialTab === "CHATS"
+    ) {
+      return initialTab;
+    }
+    return "CHATS";
+  });
+
+  useEffect(() => {
+    if (
+      initialTab === "REQUESTS" ||
+      initialTab === "FRIENDS" ||
+      initialTab === "FIND" ||
+      initialTab === "CHATS"
+    ) {
+      setActiveTab(initialTab);
+      if (initialTab !== "CHATS") {
+        setSelectedFriend(null);
+      }
+    }
+  }, [initialTab]);
 
   // Friends & Requests state
   const [friends, setFriends] = useState<FriendUser[]>([]);
