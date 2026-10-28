@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useUserProgress } from "@/components/UserProgressContext";
 import { useNativeLanguage } from "@/components/LanguageContext";
@@ -509,10 +508,10 @@ export function NotificationDropdown() {
       ? activeNotifications.filter((n) => !readIds.has(n.id))
       : activeNotifications;
 
-  // Dismiss on outside click / pointerdown / Escape
+  // Dismiss on outside click / Escape
   useEffect(() => {
     if (!isOpen) return;
-    const handleOutside = (e: MouseEvent | PointerEvent | TouchEvent) => {
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
@@ -520,12 +519,12 @@ export function NotificationDropdown() {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setIsOpen(false);
     };
-    document.addEventListener("pointerdown", handleOutside, true);
-    document.addEventListener("mousedown", handleOutside, true);
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("touchstart", handleOutside);
     document.addEventListener("keydown", handleKey);
     return () => {
-      document.removeEventListener("pointerdown", handleOutside, true);
-      document.removeEventListener("mousedown", handleOutside, true);
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
       document.removeEventListener("keydown", handleKey);
     };
   }, [isOpen]);
@@ -679,22 +678,11 @@ export function NotificationDropdown() {
       )}
 
       {isOpen && (
-        <>
-          {/* Full-screen click-outside backdrop rendered via Portal so clicking ANYWHERE outside closes the popup */}
-          {typeof document !== "undefined" &&
-            createPortal(
-              <div
-                className="fixed inset-0 z-40 bg-black/25 dark:bg-black/50 animate-fade-in"
-                onClick={() => setIsOpen(false)}
-                aria-hidden="true"
-              />,
-              document.body
-            )}
-          <div
-            role="menu"
-            aria-label={t("notifications")}
-            className="nq-dropdown-enter fixed left-3 right-3 top-16 z-[100] mx-auto max-w-md sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:mx-0 sm:w-[410px] sm:max-w-none rounded-2xl border-2 border-slate-200 bg-white p-3.5 shadow-[0_24px_60px_rgba(0,0,0,0.35)] dark:border-slate-700 dark:bg-sumi-900"
-          >
+        <div
+          role="menu"
+          aria-label={t("notifications")}
+          className="nq-dropdown-enter fixed left-3 right-3 top-16 z-[100] mx-auto max-w-md sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:mx-0 sm:w-[410px] sm:max-w-none rounded-2xl border-2 border-slate-200 bg-white p-3.5 shadow-[0_24px_60px_rgba(0,0,0,0.35)] dark:border-slate-700 dark:bg-sumi-900"
+        >
             {/* Header */}
             <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
@@ -1031,8 +1019,7 @@ export function NotificationDropdown() {
               )}
             </div>
           </div>
-        </>
-      )}
+        )}
     </div>
   );
 }
