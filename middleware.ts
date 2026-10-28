@@ -52,6 +52,21 @@ export async function middleware(req: NextRequest) {
     });
   }
 
+  const pathname = req.nextUrl.pathname;
+  const isAuthPage = pathname === "/login" || pathname === "/register";
+
+  // Nếu người dùng đã đăng nhập mà truy cập trang đăng nhập/đăng ký -> tự động chuyển thẳng sang /app
+  if (isAuthPage) {
+    if (token) {
+      const callback = req.nextUrl.searchParams.get("callbackUrl");
+      const targetPath =
+        callback && !callback.startsWith("/login") && !callback.startsWith("/register") ? callback : "/app";
+      return cleanupStaleChunks(NextResponse.redirect(new URL(targetPath, req.url)));
+    }
+    return cleanupStaleChunks(NextResponse.next());
+  }
+
+  // Nếu chưa đăng nhập mà truy cập các trang yêu cầu xác thực (/app, /onboarding)
   if (!token) {
     const signInUrl = new URL("/login", req.url);
     signInUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
@@ -62,5 +77,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/onboarding"],
+  matcher: ["/app/:path*", "/onboarding", "/login", "/register"],
 };

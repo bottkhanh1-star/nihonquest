@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import { BASE64_IMAGES } from "@/lib/assets/base64Images";
 import Link from "next/link";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth-options";
 import { NihonQuestLogo } from "@/components/NihonQuestLogo";
 import {
   BrushEdge,
@@ -117,7 +119,9 @@ const FEATURES: {
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const session = await getServerSession(authOptions);
+
   return (
     <div className="hp">
       {/* ============================ HERO ============================ */}
@@ -156,13 +160,21 @@ export default function Home() {
             </nav>
 
             <div className="hp-actions">
-              <Link href="/login" className="hp-btn hp-btn--ghost hp-btn--sm">
-                Đăng nhập
-              </Link>
-              <Link href="/register" className="hp-btn hp-btn--primary hp-btn--sm">
-                <IconUser />
-                Tạo tài khoản
-              </Link>
+              {session?.user ? (
+                <Link href="/app" className="hp-btn hp-btn--primary hp-btn--sm">
+                  Vào ứng dụng →
+                </Link>
+              ) : (
+                <>
+                  <Link href="/login" className="hp-btn hp-btn--ghost hp-btn--sm">
+                    Đăng nhập
+                  </Link>
+                  <Link href="/register" className="hp-btn hp-btn--primary hp-btn--sm">
+                    <IconUser />
+                    Tạo tài khoản
+                  </Link>
+                </>
+              )}
             </div>
           </header>
 
@@ -184,16 +196,26 @@ export default function Home() {
             </p>
 
             <div className="hp-cta">
-              <Link href="/register" className="hp-btn hp-btn--primary">
-                <span className="hp-btn__dot"><IconCompass /></span>
-                Bắt đầu hành trình miễn phí
-                <IconArrow />
-              </Link>
-              <Link href="/app" className="hp-btn hp-btn--ghost">
-                <IconDash />
-                Vào Dashboard ứng dụng
-                <IconArrowUR />
-              </Link>
+              {session?.user ? (
+                <Link href="/app" className="hp-btn hp-btn--primary">
+                  <span className="hp-btn__dot"><IconCompass /></span>
+                  Tiếp tục hành trình học
+                  <IconArrow />
+                </Link>
+              ) : (
+                <>
+                  <Link href="/register" className="hp-btn hp-btn--primary">
+                    <span className="hp-btn__dot"><IconCompass /></span>
+                    Bắt đầu hành trình miễn phí
+                    <IconArrow />
+                  </Link>
+                  <Link href="/app" className="hp-btn hp-btn--ghost">
+                    <IconDash />
+                    Vào Dashboard ứng dụng
+                    <IconArrowUR />
+                  </Link>
+                </>
+              )}
             </div>
           </div>
 

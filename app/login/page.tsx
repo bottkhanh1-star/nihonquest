@@ -2,7 +2,7 @@
 
 import { BASE64_IMAGES } from "@/lib/assets/base64Images";
 
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -65,18 +65,30 @@ function GoogleIcon() {
 function LoginForm() {
   const router = useRouter();
   const { t } = useNativeLanguage();
+  const [email, setEmail] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    try {
+      const savedEmail = localStorage.getItem("nq_saved_email");
+      if (savedEmail) {
+        setEmail(savedEmail);
+      }
+    } catch {}
+  }, []);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError("");
+    const userEmail = email.trim();
     const data = new FormData(e.currentTarget);
     const res = await signIn("credentials", {
       redirect: false,
-      email: String(data.get("email") || ""),
+      email: userEmail,
       password: String(data.get("password") || ""),
     });
     if (res?.error) {
@@ -84,6 +96,15 @@ function LoginForm() {
       setLoading(false);
       return;
     }
+
+    try {
+      if (rememberMe) {
+        localStorage.setItem("nq_saved_email", userEmail);
+      } else {
+        localStorage.removeItem("nq_saved_email");
+      }
+    } catch {}
+
     router.push("/app");
   }
 
@@ -93,7 +114,16 @@ function LoginForm() {
         <label htmlFor="login-email">{t("loginEmail") || "Email"}</label>
         <div className="nq-input-wrap">
           <span className="nq-input-icon"><NQIcon name="mail" /></span>
-          <input id="login-email" autoComplete="email" name="email" type="email" required placeholder={t("loginEmailPlaceholder") || "Nhập địa chỉ email của bạn"} />
+          <input
+            id="login-email"
+            autoComplete="email"
+            name="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            placeholder={t("loginEmailPlaceholder") || "Nhập địa chỉ email của bạn"}
+          />
         </div>
       </div>
 
@@ -110,7 +140,14 @@ function LoginForm() {
       </div>
 
       <div className="nq-remember">
-        <label><input type="checkbox" defaultChecked /> {t("loginRemember") || "Ghi nhớ đăng nhập"}</label>
+        <label>
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+          />{" "}
+          {t("loginRemember") || "Ghi nhớ đăng nhập"}
+        </label>
         <Link href="/forgot-password">{t("loginForgot") || "Quên mật khẩu?"}</Link>
       </div>
 
@@ -125,10 +162,18 @@ function LoginForm() {
 }
 
 export default function LoginPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const { nativeLanguage, setNativeLanguage, t } = useNativeLanguage();
   const [googleLoading, setGoogleLoading] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace("/app");
+    }
+  }, [status, router]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

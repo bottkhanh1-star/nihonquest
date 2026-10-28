@@ -47,7 +47,11 @@ const isSecureCookieEnv =
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 ngày ghi nhớ phiên đăng nhập
+    updateAge: 24 * 60 * 60, // Tự động gia hạn khi người dùng tương tác mỗi ngày
+  },
   secret: getAuthSecret(),
   pages: { signIn: "/login", newUser: "/onboarding" },
   providers: [
@@ -168,6 +172,7 @@ export const authOptions: NextAuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: isSecureCookieEnv,
+        maxAge: 30 * 24 * 60 * 60, // 30 ngày
       },
     },
     callbackUrl: {

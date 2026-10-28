@@ -22,7 +22,9 @@
     "db:studio": "prisma studio",
     "postinstall": "prisma generate && node scripts/patch-prisma-wasm.js",
     "build:worker": "opennextjs-cloudflare build",
-    "deploy": "opennextjs-cloudflare build && wrangler deploy"
+    "deploy": "opennextjs-cloudflare build && wrangler deploy",
+    "apk:sync": "npx cap sync android",
+    "apk:build": "powershell -ExecutionPolicy Bypass -File scripts/build-apk.ps1"
   },
   "dependencies": {
     "@neon/config": "^1.8.4",
@@ -53,6 +55,9 @@
     "zod": "3.23.8"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/cli": "^6.2.2",
+    "@capacitor/core": "^6.2.2",
     "@opennextjs/cloudflare": "^1.15.1",
     "@types/bcryptjs": "2.4.6",
     "@types/node": "20.14.12",

@@ -42,3 +42,10 @@ extracted_*.txt
 
 .wrangler
 .env.production
+
+# APK & Native Android build artifacts
+*.apk
+android/
+capacitor.config.json
+mobile-shell/
+scripts/build-apk.ps1
