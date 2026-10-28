@@ -160,17 +160,7 @@ export async function POST(
         },
       }).catch(() => {});
 
-      const remaining = await prisma.groupCallParticipant.count({
-        where: { roomId: room.id },
-      });
-
-      if (remaining === 0) {
-        await prisma.groupCallRoom.update({
-          where: { id: room.id },
-          data: { isActive: false },
-        }).catch(() => {});
-      }
-
+      // Room remains active for 3 days so host or friends can rejoin anytime
       return NextResponse.json({ success: true });
     }
 

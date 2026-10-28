@@ -54,10 +54,14 @@ const ICE_SERVERS: RTCConfiguration = {
 export function GroupCallModal({
   roomCode,
   initialRoom,
+  initialMuted = false,
+  initialVideoOff = false,
   onLeave,
 }: {
   roomCode: string;
   initialRoom: GroupRoomData;
+  initialMuted?: boolean;
+  initialVideoOff?: boolean;
   onLeave: () => void;
 }) {
   const { data: session } = useSession();
@@ -65,8 +69,8 @@ export function GroupCallModal({
   const currentUserName = session?.user?.name || "Bạn học";
 
   const [room, setRoom] = useState<GroupRoomData>(initialRoom);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isMuted, setIsMuted] = useState(initialMuted);
+  const [isVideoOff, setIsVideoOff] = useState(initialVideoOff);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -98,6 +102,11 @@ export function GroupCallModal({
           return;
         }
         localStreamRef.current = stream;
+        const audioTrack = stream.getAudioTracks()[0];
+        if (audioTrack) audioTrack.enabled = !initialMuted;
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) videoTrack.enabled = !initialVideoOff;
+
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }

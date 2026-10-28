@@ -24,22 +24,15 @@ export async function GET(request: Request) {
       },
     }).catch(() => {});
 
-    // Auto mark empty rooms inactive
-    const emptyRooms = await prisma.groupCallRoom.findMany({
+    // Auto mark rooms older than 3 days inactive
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    await prisma.groupCallRoom.updateMany({
       where: {
         isActive: true,
-        participants: { none: {} },
-        createdAt: { lt: new Date(Date.now() - 60 * 1000) },
+        createdAt: { lt: threeDaysAgo },
       },
-      select: { id: true },
-    });
-
-    if (emptyRooms.length > 0) {
-      await prisma.groupCallRoom.updateMany({
-        where: { id: { in: emptyRooms.map((r) => r.id) } },
-        data: { isActive: false },
-      }).catch(() => {});
-    }
+      data: { isActive: false },
+    }).catch(() => {});
 
     const whereClause: Record<string, unknown> = {
       isActive: true,
