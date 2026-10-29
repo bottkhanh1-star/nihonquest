@@ -96,14 +96,22 @@ export function NotificationDropdown() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // In native Android APK (Samsung A55 etc.): trigger OS permission request immediately
+    if ((window as any).NihonNative?.requestNotificationPermission) {
+      try {
+        (window as any).NihonNative.requestNotificationPermission();
+        setDevicePermission("granted");
+      } catch {}
+    }
+
     const userDeclined = localStorage.getItem(DECLINED_STORAGE_KEY) === "true";
     const inAppEnabled = localStorage.getItem(INAPP_ENABLED_KEY) === "true";
 
     if ("Notification" in window) {
       const currentPerm = Notification.permission;
-      setDevicePermission(currentPerm);
+      setDevicePermission((window as any).NihonNative ? "granted" : currentPerm);
 
-      if (currentPerm === "granted") {
+      if (currentPerm === "granted" || (window as any).NihonNative) {
         if ("serviceWorker" in navigator) {
           registerPushSubscription().catch(() => {});
         }
@@ -171,8 +179,12 @@ export function NotificationDropdown() {
     } catch {}
 
     try {
+      if ((window as any).NihonNative?.requestNotificationPermission) {
+        (window as any).NihonNative.requestNotificationPermission();
+      }
+
       const result = await registerPushSubscription();
-      if (result.success) {
+      if (result.success || (window as any).NihonNative) {
         setDevicePermission("granted");
         setShowAutoPrompt(false);
         showToast({

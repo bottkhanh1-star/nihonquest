@@ -31,6 +31,22 @@ export async function showSystemDeviceNotification(payload: {
   url?: string;
   tag?: string;
 }): Promise<boolean> {
+  // If running inside Android APK (e.g. Samsung Galaxy A55), dispatch to native Android NotificationManager!
+  if (typeof window !== "undefined" && (window as any).NihonNative?.showNativeNotification) {
+    try {
+      (window as any).NihonNative.showNativeNotification(
+        payload.title,
+        payload.body,
+        payload.tag || "",
+        payload.url || ""
+      );
+      playNihonQuestChime();
+      return true;
+    } catch (nativeErr) {
+      console.warn("[PushClient] NihonNative showNativeNotification failed:", nativeErr);
+    }
+  }
+
   if (typeof window === "undefined" || !("Notification" in window)) return false;
   if (Notification.permission !== "granted") return false;
 
@@ -97,6 +113,15 @@ export async function registerPushSubscription(): Promise<{
   }
 
   try {
+    // 0. If running in native Android APK (Samsung A55 etc.), trigger native OS runtime permission prompt!
+    if (typeof window !== "undefined" && (window as any).NihonNative?.requestNotificationPermission) {
+      try {
+        (window as any).NihonNative.requestNotificationPermission();
+      } catch (nativeErr) {
+        console.warn("[PushClient] NihonNative requestNotificationPermission:", nativeErr);
+      }
+    }
+
     // 1. MUST request Notification permission FIRST on user tap (preserves mobile user gesture!)
     if ("Notification" in window) {
       const currentPerm = Notification.permission;
