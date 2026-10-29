@@ -15,6 +15,49 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const callId = searchParams.get("callId");
 
+    // Auto-mark stale ringing calls (>60s) as MISSED so call logs stay accurate
+    await prisma.callSession.updateMany({
+      where: {
+        status: "RINGING",
+        createdAt: { lt: new Date(Date.now() - 60 * 1000) },
+      },
+      data: {
+        status: "MISSED",
+        endedAt: new Date(),
+      },
+    }).catch(() => {});
+
+    // Return call history (answered, missed, outgoing, incoming)
+    if (searchParams.get("history") === "true") {
+      const calls = await prisma.callSession.findMany({
+        where: {
+          OR: [{ callerId: userId }, { receiverId: userId }],
+        },
+        include: {
+          caller: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+              profile: { select: { displayName: true, avatar: true } },
+            },
+          },
+          receiver: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+              profile: { select: { displayName: true, avatar: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      });
+
+      return NextResponse.json({ calls });
+    }
+
     if (callId) {
       // Get details of a specific call session (for polling WebRTC signals)
       const call = await prisma.callSession.findUnique({
@@ -69,7 +112,33 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({ incomingCall: incomingCall || null });
+    // Check for recent missed calls in the last 24h
+    const recentMissedCalls = await prisma.callSession.findMany({
+      where: {
+        receiverId: userId,
+        status: "MISSED",
+        createdAt: {
+          gt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      },
+      include: {
+        caller: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+            profile: { select: { displayName: true, avatar: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    });
+
+    return NextResponse.json({
+      incomingCall: incomingCall || null,
+      recentMissedCalls: recentMissedCalls || [],
+    });
   } catch (err: unknown) {
     console.error("[/api/calls GET Error]:", err);
     return NextResponse.json({ error: "Failed to poll calls" }, { status: 500 });
@@ -362,16 +431,28 @@ export async function POST(request: Request) {
       const endedAt = new Date();
       const startedAt = call.startedAt || call.createdAt;
       const durationSec = Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000));
+      const wasAccepted = call.status === "ACCEPTED";
+      const isCaller = call.callerId === userId;
 
       const updated = await prisma.callSession.update({
         where: { id: callId },
         data: {
-          status: "ENDED",
+          // If caller cancels before answer, mark as MISSED for the receiver; otherwise ENDED
+          status: wasAccepted ? "ENDED" : isCaller ? "MISSED" : "REJECTED",
           endedAt,
-          durationSec: call.status === "ACCEPTED" ? durationSec : 0,
+          durationSec: wasAccepted ? durationSec : 0,
         },
       });
 
+      return NextResponse.json({ call: updated });
+    }
+
+    if (action === "miss") {
+      if (!callId) return NextResponse.json({ error: "Missing callId" }, { status: 400 });
+      const updated = await prisma.callSession.update({
+        where: { id: callId },
+        data: { status: "MISSED", endedAt: new Date(), durationSec: 0 },
+      });
       return NextResponse.json({ call: updated });
     }
 

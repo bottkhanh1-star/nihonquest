@@ -45,6 +45,7 @@ export function NotificationDropdown() {
     recentFriends,
     acceptFriendRequest,
     incomingCall,
+    recentMissedCalls,
   } = useGlobalCall();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -295,6 +296,28 @@ export function NotificationDropdown() {
     });
   }
 
+  // 1.5. Cuộc gọi nhỡ (Missed Calls)
+  if (recentMissedCalls && recentMissedCalls.length > 0) {
+    recentMissedCalls.forEach((mc) => {
+      allNotifications.push({
+        id: `notif-missed-${mc.id}`,
+        type: "call",
+        title:
+          nativeLanguage === "vi"
+            ? `📵 Cuộc gọi nhỡ từ ${mc.caller.name}`
+            : `📵 Missed Call from ${mc.caller.name}`,
+        desc:
+          nativeLanguage === "vi"
+            ? `Bạn có cuộc gọi ${mc.callType === "VIDEO" ? "video" : "thoại"} nhỡ. Hãy gọi lại hoặc nhắn tin cho bạn học nhé!`
+            : `You missed a ${mc.callType === "VIDEO" ? "video" : "voice"} call. Tap to view and call back!`,
+        actionUrl: `/app/messages?tab=CALLS`,
+        actionLabel: nativeLanguage === "vi" ? "Xem lịch sử & Gọi lại →" : "View & Call back →",
+        time: nativeLanguage === "vi" ? "Cuộc gọi nhỡ" : "Missed",
+        isUrgent: true,
+      });
+    });
+  }
+
   // 2. Kết bạn mới (New Friend Requests & Accepted Friends)
   if (incomingFriendRequests.length > 0) {
     incomingFriendRequests.forEach((req) => {
@@ -439,7 +462,7 @@ export function NotificationDropdown() {
       nativeLanguage === "vi"
         ? `Tiến độ giáo trình: ${completedLessons}/${totalLessons} bài (${lessonPct}%) • Đã thuộc ${vocabLearned} từ vựng & ${grammarLearned} ngữ pháp.`
         : `Curriculum: ${completedLessons}/${totalLessons} lessons (${lessonPct}%) • ${vocabLearned} vocab & ${grammarLearned} grammar points mastered.`,
-    actionUrl: "/app/lesson",
+    actionUrl: "/app/learn",
     actionLabel:
       nativeLanguage === "vi"
         ? `Học Bài ${nextLessonNumber} ngay →`

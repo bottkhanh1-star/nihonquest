@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, Suspense } from "react";
+import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { AppNav } from "@/components/AppNav";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -31,6 +31,51 @@ interface MessageItem {
   attachmentData?: string | null;
   isRead: boolean;
   createdAt: string;
+}
+
+interface CallLogItem {
+  id: string;
+  callerId: string;
+  receiverId: string;
+  status: "RINGING" | "ACCEPTED" | "REJECTED" | "ENDED" | "MISSED";
+  callType: "AUDIO" | "VIDEO";
+  durationSec: number;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  createdAt: string;
+  caller: {
+    id: string;
+    name: string | null;
+    image: string | null;
+    profile?: { displayName: string | null; avatar: string | null; learningLevel: string | null } | null;
+  };
+  receiver: {
+    id: string;
+    name: string | null;
+    image: string | null;
+    profile?: { displayName: string | null; avatar: string | null; learningLevel: string | null } | null;
+  };
+}
+
+function formatCallDuration(sec: number) {
+  if (!sec || sec <= 0) return "0s";
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m === 0) return `${s}s`;
+  return `${m}p ${s.toString().padStart(2, "0")}s`;
+}
+
+function formatCallTime(dateStr: string) {
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (isToday) return `Hôm nay ${time}`;
+    return `${d.getDate()}/${d.getMonth() + 1} lúc ${time}`;
+  } catch {
+    return dateStr;
+  }
 }
 
 interface SearchUserResult {
@@ -213,9 +258,10 @@ function MessagesAndFriendsContent() {
   const initialTab = searchParams.get("tab");
 
   // Navigation tab for sidebar
-  const [activeTab, setActiveTab] = useState<"CHATS" | "FRIENDS" | "REQUESTS" | "FIND">(() => {
+  const [activeTab, setActiveTab] = useState<"CHATS" | "CALLS" | "FRIENDS" | "REQUESTS" | "FIND">(() => {
     if (
       initialTab === "REQUESTS" ||
+      initialTab === "CALLS" ||
       initialTab === "FRIENDS" ||
       initialTab === "FIND" ||
       initialTab === "CHATS"
@@ -228,6 +274,7 @@ function MessagesAndFriendsContent() {
   useEffect(() => {
     if (
       initialTab === "REQUESTS" ||
+      initialTab === "CALLS" ||
       initialTab === "FRIENDS" ||
       initialTab === "FIND" ||
       initialTab === "CHATS"
@@ -238,6 +285,32 @@ function MessagesAndFriendsContent() {
       }
     }
   }, [initialTab]);
+
+  // Call history state
+  const [callLogs, setCallLogs] = useState<CallLogItem[]>([]);
+  const [loadingCalls, setLoadingCalls] = useState(false);
+  const [callFilter, setCallFilter] = useState<"ALL" | "MISSED">("ALL");
+
+  const fetchCallLogs = useCallback(async () => {
+    setLoadingCalls(true);
+    try {
+      const res = await fetch("/api/calls?history=true");
+      if (res.ok) {
+        const data = await res.json();
+        setCallLogs(data.calls || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingCalls(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "CALLS") {
+      fetchCallLogs();
+    }
+  }, [activeTab, fetchCallLogs]);
 
   // Friends & Requests state
   const [friends, setFriends] = useState<FriendUser[]>([]);
@@ -660,34 +733,60 @@ function MessagesAndFriendsContent() {
               </div>
 
               {/* Sub-tabs */}
-              <div className="mt-3 flex items-center gap-1 rounded-2xl bg-slate-100 p-1 dark:bg-sumi-800">
+              <div className="mt-3 grid grid-cols-4 gap-1 rounded-2xl bg-slate-100 p-1 dark:bg-sumi-800 text-center">
                 <button
                   onClick={() => {
                     playClick();
                     setActiveTab("CHATS");
                   }}
-                  className={`flex-1 rounded-xl py-1.5 text-xs font-bold transition ${
+                  className={`rounded-xl py-1.5 text-[11px] font-bold transition truncate ${
                     activeTab === "CHATS"
                       ? "bg-white text-slate-900 shadow-sm dark:bg-sumi-900 dark:text-white"
                       : "text-slate-500 hover:text-slate-900 dark:text-slate-400"
                   }`}
+                  title="Danh sách bạn bè & đoạn chat"
                 >
-                  {s.tabFriends} ({friends.length})
+                  💬 {s.tabFriends}
+                </button>
+                <button
+                  onClick={() => {
+                    playClick();
+                    setActiveTab("CALLS");
+                    fetchCallLogs();
+                  }}
+                  className={`relative rounded-xl py-1.5 text-[11px] font-bold transition truncate ${
+                    activeTab === "CALLS"
+                      ? "bg-white text-slate-900 shadow-sm dark:bg-sumi-900 dark:text-white"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400"
+                  }`}
+                  title="Lịch sử cuộc gọi"
+                >
+                  📞 {nativeLanguage === "vi" ? "Cuộc gọi" : "Calls"}
+                  {callLogs.filter(
+                    (c) => c.receiverId === progress?.userId && (c.status === "MISSED" || c.status === "RINGING")
+                  ).length > 0 && (
+                    <span className="ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-600 text-[8px] font-black text-white">
+                      {callLogs.filter(
+                        (c) => c.receiverId === progress?.userId && (c.status === "MISSED" || c.status === "RINGING")
+                      ).length}
+                    </span>
+                  )}
                 </button>
                 <button
                   onClick={() => {
                     playClick();
                     setActiveTab("REQUESTS");
                   }}
-                  className={`relative flex-1 rounded-xl py-1.5 text-xs font-bold transition ${
+                  className={`relative rounded-xl py-1.5 text-[11px] font-bold transition truncate ${
                     activeTab === "REQUESTS"
                       ? "bg-white text-slate-900 shadow-sm dark:bg-sumi-900 dark:text-white"
                       : "text-slate-500 hover:text-slate-900 dark:text-slate-400"
                   }`}
+                  title="Lời mời kết bạn"
                 >
-                  {s.tabRequests}
+                  🤝 {s.tabRequests}
                   {incomingRequests.length > 0 && (
-                    <span className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[9px] font-black text-white">
+                    <span className="ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-600 text-[8px] font-black text-white">
                       {incomingRequests.length}
                     </span>
                   )}
@@ -697,11 +796,12 @@ function MessagesAndFriendsContent() {
                     playClick();
                     setActiveTab("FIND");
                   }}
-                  className={`flex-1 rounded-xl py-1.5 text-xs font-bold transition ${
+                  className={`rounded-xl py-1.5 text-[11px] font-bold transition truncate ${
                     activeTab === "FIND"
                       ? "bg-white text-slate-900 shadow-sm dark:bg-sumi-900 dark:text-white"
                       : "text-slate-500 hover:text-slate-900 dark:text-slate-400"
                   }`}
+                  title="Tìm bạn học mới"
                 >
                   🔍 {s.tabFind}
                 </button>
@@ -799,6 +899,224 @@ function MessagesAndFriendsContent() {
                         </div>
                       );
                     })
+                  )}
+                </div>
+              )}
+
+              {/* TAB: CALL HISTORY */}
+              {activeTab === "CALLS" && (
+                <div className="space-y-2">
+                  {/* Subfilter: Tất cả / Cuộc gọi nhỡ */}
+                  <div className="flex items-center justify-between px-1 pb-1">
+                    <div className="inline-flex rounded-xl bg-slate-100 p-0.5 text-[11px] font-bold dark:bg-sumi-800">
+                      <button
+                        onClick={() => setCallFilter("ALL")}
+                        className={`rounded-lg px-2.5 py-1 transition ${
+                          callFilter === "ALL"
+                            ? "bg-white text-slate-900 shadow-xs dark:bg-sumi-900 dark:text-white"
+                            : "text-slate-500 hover:text-slate-800 dark:text-slate-400"
+                        }`}
+                      >
+                        {nativeLanguage === "vi" ? `Tất cả (${callLogs.length})` : `All (${callLogs.length})`}
+                      </button>
+                      <button
+                        onClick={() => setCallFilter("MISSED")}
+                        className={`rounded-lg px-2.5 py-1 transition ${
+                          callFilter === "MISSED"
+                            ? "bg-white text-rose-600 shadow-xs dark:bg-sumi-900 dark:text-rose-400"
+                            : "text-slate-500 hover:text-slate-800 dark:text-slate-400"
+                        }`}
+                      >
+                        {nativeLanguage === "vi"
+                          ? `Gọi nhỡ (${
+                              callLogs.filter(
+                                (c) =>
+                                  c.receiverId === progress?.userId &&
+                                  (c.status === "MISSED" || c.status === "RINGING")
+                              ).length
+                            })`
+                          : `Missed (${
+                              callLogs.filter(
+                                (c) =>
+                                  c.receiverId === progress?.userId &&
+                                  (c.status === "MISSED" || c.status === "RINGING")
+                              ).length
+                            })`}
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={fetchCallLogs}
+                      className="rounded-lg p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
+                      title="Làm mới lịch sử"
+                    >
+                      🔄
+                    </button>
+                  </div>
+
+                  {loadingCalls ? (
+                    <div className="py-8 text-center text-xs text-slate-400">
+                      Đang tải lịch sử cuộc gọi...
+                    </div>
+                  ) : callLogs.filter((c) =>
+                      callFilter === "MISSED"
+                        ? c.receiverId === progress?.userId &&
+                          (c.status === "MISSED" || c.status === "RINGING")
+                        : true
+                    ).length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center dark:border-slate-800">
+                      <div className="text-2xl mb-1">📞</div>
+                      <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                        {callFilter === "MISSED"
+                          ? "Không có cuộc gọi nhỡ nào"
+                          : "Chưa có lịch sử cuộc gọi"}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        Bấm gọi thoại hoặc gọi video với bạn học để cùng luyện Kaiwa!
+                      </p>
+                    </div>
+                  ) : (
+                    callLogs
+                      .filter((c) =>
+                        callFilter === "MISSED"
+                          ? c.receiverId === progress?.userId &&
+                            (c.status === "MISSED" || c.status === "RINGING")
+                          : true
+                      )
+                      .map((call) => {
+                        const isCaller = call.callerId === progress?.userId;
+                        const partner = isCaller ? call.receiver : call.caller;
+                        const partnerName =
+                          partner?.profile?.displayName || partner?.name || "Bạn học";
+                        const partnerAvatar = partner?.profile?.avatar || partner?.image;
+                        const isMissed =
+                          !isCaller && (call.status === "MISSED" || call.status === "RINGING");
+                        const isRejected = call.status === "REJECTED";
+                        const isConnected =
+                          call.status === "ENDED" || call.status === "ACCEPTED";
+
+                        return (
+                          <div
+                            key={call.id}
+                            className={`group flex items-center justify-between rounded-2xl border p-2.5 transition ${
+                              isMissed
+                                ? "border-rose-200 bg-rose-50/70 dark:border-rose-900/40 dark:bg-rose-950/20"
+                                : "border-slate-100 bg-white hover:bg-slate-50/80 dark:border-slate-800/80 dark:bg-sumi-850 dark:hover:bg-sumi-800/60"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <UserAvatar
+                                src={partnerAvatar}
+                                name={partnerName}
+                                sizeClass="h-9 w-9 text-xs"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <p
+                                    className={`truncate text-xs font-extrabold ${
+                                      isMissed
+                                        ? "text-rose-600 dark:text-rose-400"
+                                        : "text-slate-900 dark:text-white"
+                                    }`}
+                                  >
+                                    {partnerName}
+                                  </p>
+                                  <span className="text-[10px] text-slate-400">
+                                    {call.callType === "VIDEO" ? "📹" : "🎙️"}
+                                  </span>
+                                </div>
+
+                                <div className="mt-0.5 flex items-center gap-1.5 text-[10px]">
+                                  {isMissed ? (
+                                    <span className="flex items-center gap-0.5 font-bold text-rose-600 dark:text-rose-400">
+                                      <span>📵</span>
+                                      <span>Gọi nhỡ</span>
+                                    </span>
+                                  ) : isRejected ? (
+                                    <span className="flex items-center gap-0.5 text-slate-400">
+                                      <span>🚫</span>
+                                      <span>{isCaller ? "Bị từ chối" : "Đã từ chối"}</span>
+                                    </span>
+                                  ) : isCaller ? (
+                                    <span className="flex items-center gap-0.5 font-medium text-sky-600 dark:text-sky-400">
+                                      <span>↗</span>
+                                      <span>
+                                        {isConnected
+                                          ? `Gọi đi (${formatCallDuration(call.durationSec)})`
+                                          : "Gọi đi"}
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-0.5 font-medium text-emerald-600 dark:text-emerald-400">
+                                      <span>↙</span>
+                                      <span>
+                                        {isConnected
+                                          ? `Gọi đến (${formatCallDuration(call.durationSec)})`
+                                          : "Gọi đến"}
+                                      </span>
+                                    </span>
+                                  )}
+                                  <span className="text-slate-300 dark:text-slate-600">•</span>
+                                  <span className="text-slate-400">
+                                    {formatCallTime(call.createdAt)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions: Call Back / Video / Chat */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  playClick();
+                                  startCall(partner.id, partnerName, partnerAvatar, "AUDIO");
+                                }}
+                                className="flex h-7 w-7 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-emerald-50 hover:text-emerald-600 dark:border-slate-700 dark:bg-sumi-800 dark:text-slate-300 transition"
+                                title="Gọi thoại lại"
+                              >
+                                📞
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  playClick();
+                                  startCall(partner.id, partnerName, partnerAvatar, "VIDEO");
+                                }}
+                                className="flex h-7 w-7 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-sumi-800 dark:text-slate-300 transition"
+                                title="Gọi video lại"
+                              >
+                                📹
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  playClick();
+                                  const matchedFriend = friends.find(
+                                    (f) => f.userId === partner.id
+                                  );
+                                  if (matchedFriend) {
+                                    setSelectedFriend(matchedFriend);
+                                    setActiveTab("CHATS");
+                                  } else {
+                                    showToast({
+                                      title: "Chưa kết bạn",
+                                      description: "Bạn cần kết bạn để nhắn tin trực tiếp.",
+                                      type: "info",
+                                    });
+                                  }
+                                }}
+                                className="flex h-7 w-7 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-sky-50 hover:text-sky-600 dark:border-slate-700 dark:bg-sumi-800 dark:text-slate-300 transition"
+                                title="Nhắn tin"
+                              >
+                                💬
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
                   )}
                 </div>
               )}

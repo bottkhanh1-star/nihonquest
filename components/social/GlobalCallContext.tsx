@@ -44,9 +44,21 @@ export interface IncomingFriendRequestSummary {
   updatedAt?: string;
 }
 
+export interface MissedCallSummary {
+  id: string;
+  caller: {
+    id: string;
+    name: string;
+    avatar?: string | null;
+  };
+  callType: "AUDIO" | "VIDEO";
+  createdAt: string;
+}
+
 interface CallContextType {
   activeCall: ActiveCallState | null;
   incomingCall: IncomingCallData | null;
+  recentMissedCalls: MissedCallSummary[];
   startCall: (
     targetUserId: string,
     targetUserName: string,
@@ -73,6 +85,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
 
   const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null);
   const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null);
+  const [recentMissedCalls, setRecentMissedCalls] = useState<MissedCallSummary[]>([]);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
   const [unreadConversations, setUnreadConversations] = useState<UnreadConversationSummary[]>([]);
   const [latestConversation, setLatestConversation] = useState<UnreadConversationSummary | null>(null);
@@ -81,6 +94,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
 
   const prevUnreadRef = useRef<number | null>(null);
   const prevFriendReqCountRef = useRef<number | null>(null);
+  const lastRungCallIdRef = useRef<string | null>(null);
 
   const handleStatusChange = useCallback((status: ActiveCallState["status"]) => {
     setActiveCall((prev) => (prev ? { ...prev, status } : null));
@@ -202,15 +216,52 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
         const res = await fetch("/api/calls");
         if (res.ok) {
           const data = await res.json();
+
+          if (Array.isArray(data.recentMissedCalls)) {
+            setRecentMissedCalls(
+              data.recentMissedCalls.map((c: any) => ({
+                id: c.id,
+                caller: {
+                  id: c.caller?.id,
+                  name: c.caller?.profile?.displayName || c.caller?.name || "Bạn học",
+                  avatar: c.caller?.profile?.avatar || c.caller?.image,
+                },
+                callType: c.callType,
+                createdAt: c.createdAt,
+              }))
+            );
+          }
+
           if (data.incomingCall) {
+            const callerName =
+              data.incomingCall.caller.profile?.displayName ||
+              data.incomingCall.caller.name ||
+              "Bạn học";
+
+            if (lastRungCallIdRef.current !== data.incomingCall.id) {
+              lastRungCallIdRef.current = data.incomingCall.id;
+
+              // Vibrate device on incoming call
+              if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+                try {
+                  navigator.vibrate([400, 250, 400, 250, 600]);
+                } catch {}
+              }
+
+              // Show system OS notification for incoming call
+              showSystemDeviceNotification({
+                title: `📞 Cuộc gọi đến từ ${callerName}!`,
+                body: `Đang gọi ${data.incomingCall.callType === "VIDEO" ? "video" : "thoại"} cho bạn. Bấm để trả lời ngay!`,
+                url: `/app/messages?friendId=${data.incomingCall.caller.id}&callId=${data.incomingCall.id}`,
+                tag: `incoming-call-${data.incomingCall.id}`,
+              }).catch(() => {});
+            }
+
             setIncomingCall({
               id: data.incomingCall.id,
               caller: {
                 id: data.incomingCall.caller.id,
-                name:
-                  data.incomingCall.caller.profile?.displayName ||
-                  data.incomingCall.caller.name ||
-                  "Bạn học",
+                name: callerName,
                 avatar:
                   data.incomingCall.caller.profile?.avatar ||
                   data.incomingCall.caller.image,
@@ -218,6 +269,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
               callType: data.incomingCall.callType,
             });
           } else {
+            lastRungCallIdRef.current = null;
             setIncomingCall(null);
           }
         }
@@ -334,6 +386,7 @@ export function GlobalCallProvider({ children }: { children: React.ReactNode }) 
       value={{
         activeCall,
         incomingCall,
+        recentMissedCalls,
         startCall,
         endCall,
         unreadMessagesCount,
