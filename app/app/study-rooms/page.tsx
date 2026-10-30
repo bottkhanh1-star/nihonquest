@@ -37,6 +37,7 @@ function StudyRoomsInner() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomLevel, setNewRoomLevel] = useState("N5");
+  const [newRoomMaxMembers, setNewRoomMaxMembers] = useState<number>(20);
   const [newRoomIsPrivate, setNewRoomIsPrivate] = useState(false);
   const [newRoomPin, setNewRoomPin] = useState("");
   const [creating, setCreating] = useState(false);
@@ -327,7 +328,7 @@ function StudyRoomsInner() {
           levelTag: newRoomLevel,
           isPrivate: newRoomIsPrivate,
           pinCode: newRoomIsPrivate ? newRoomPin : null,
-          maxMembers: 6,
+          maxMembers: newRoomMaxMembers,
         }),
       });
 
@@ -365,7 +366,7 @@ function StudyRoomsInner() {
         <div className="relative overflow-hidden rounded-3xl border border-red-500/20 bg-gradient-to-br from-red-950/40 via-sumi-900 to-[#161d24] p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
           <div className="max-w-2xl">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600/20 px-3 py-1 text-xs font-bold text-red-400 border border-red-500/30 mb-3">
-              🎙️ WebRTC Mesh Call • 2–6 Người • Hiệu lực 3 ngày
+              🎙️ Adaptive WebRTC • Tối đa 30 Người • Hiệu lực 3 ngày
             </span>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
               Phòng Học Kaiwa Nhóm
@@ -753,6 +754,22 @@ function StudyRoomsInner() {
                   <option value="N3">JLPT N3 (Trung cấp)</option>
                   <option value="N2">JLPT N2 (Trung cao cấp)</option>
                   <option value="N1">JLPT N1 (Cao cấp)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">
+                  Số lượng thành viên tối đa:
+                </label>
+                <select
+                  value={newRoomMaxMembers}
+                  onChange={(e) => setNewRoomMaxMembers(Number(e.target.value))}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white focus:outline-none focus:border-red-500"
+                >
+                  <option value={8}>8 người — Nhóm nhỏ (Full Camera HD 480p)</option>
+                  <option value={15}>15 người — Lớp tiêu chuẩn (Cân bằng tối ưu ⭐)</option>
+                  <option value={20}>20 người — Lớp học Kaiwa (Khuyên dùng)</option>
+                  <option value={30}>30 người — Hội thảo / CLB lớn (Tự động tối ưu băng thông)</option>
                 </select>
               </div>
 

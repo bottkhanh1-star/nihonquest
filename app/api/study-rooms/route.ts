@@ -34,6 +34,15 @@ export async function GET(request: Request) {
       data: { isActive: false },
     }).catch(() => {});
 
+    // Upgrade legacy 4/6-member active rooms to 20 members capacity
+    await prisma.groupCallRoom.updateMany({
+      where: {
+        isActive: true,
+        maxMembers: { lte: 6 },
+      },
+      data: { maxMembers: 20 },
+    }).catch(() => {});
+
     const whereClause: Record<string, unknown> = {
       isActive: true,
       isPrivate: false,
@@ -86,7 +95,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { name, levelTag = "ALL", isPrivate = false, pinCode, maxMembers = 6 } = body;
+    const { name, levelTag = "ALL", isPrivate = false, pinCode, maxMembers = 20 } = body;
 
     const trimmedName = String(name || "").trim() || "Phòng học Kaiwa Nihon Quest";
     const roomCode = `KAIWA-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.floor(
@@ -101,7 +110,7 @@ export async function POST(request: Request) {
         hostId: userId,
         isPrivate: Boolean(isPrivate),
         pinCode: pinCode ? String(pinCode).trim() : null,
-        maxMembers: Math.min(Math.max(Number(maxMembers) || 4, 2), 6),
+        maxMembers: Math.min(Math.max(Number(maxMembers) || 20, 2), 30),
         isActive: true,
       },
     });

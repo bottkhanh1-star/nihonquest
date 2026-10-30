@@ -224,6 +224,18 @@ export function GroupCallModal({
             const otherParticipants = roomData.room.participants.filter(
               (p: { userId: string }) => p.userId !== currentUserId
             );
+            const activeRemoteIds = new Set(
+              otherParticipants.map((p: { userId: string }) => p.userId)
+            );
+
+            // Cleanup peer connections of members who left the room to save CPU & bandwidth
+            peersRef.current.forEach((peerObj, remoteId) => {
+              if (!activeRemoteIds.has(remoteId)) {
+                peerObj.pc.close();
+                peersRef.current.delete(remoteId);
+                remoteVideoRefs.current.delete(remoteId);
+              }
+            });
 
             for (const participant of otherParticipants) {
               const remoteId = participant.userId;
@@ -457,7 +469,30 @@ export function GroupCallModal({
   const otherMembers = room.participants.filter((p) => p.userId !== currentUserId);
   const totalCount = 1 + otherMembers.length;
 
-  // Grid layout class based on member count
+  // Smart Adaptive WebRTC Quality: automatically adjust video resolution & framerate as room grows
+  useEffect(() => {
+    if (!localStreamRef.current || isScreenSharing) return;
+    const videoTrack = localStreamRef.current.getVideoTracks()[0];
+    if (!videoTrack || typeof videoTrack.applyConstraints !== "function") return;
+
+    const constraints =
+      totalCount <= 6
+        ? { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } }
+        : totalCount <= 15
+        ? { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 15 } }
+        : { width: { ideal: 240 }, height: { ideal: 180 }, frameRate: { ideal: 12 } };
+
+    videoTrack.applyConstraints(constraints).catch(() => {});
+  }, [totalCount, isScreenSharing]);
+
+  const qualityModeLabel =
+    totalCount <= 6
+      ? "HD 480p"
+      : totalCount <= 15
+      ? "Cân bằng (Tối ưu nhóm)"
+      : "Tiết kiệm băng thông (Lớp đông)";
+
+  // Grid layout class based on member count (supports up to 30 members smoothly)
   const gridClass =
     totalCount === 1
       ? "grid-cols-1"
@@ -465,7 +500,18 @@ export function GroupCallModal({
       ? "grid-cols-1 sm:grid-cols-2"
       : totalCount <= 4
       ? "grid-cols-2"
-      : "grid-cols-2 sm:grid-cols-3";
+      : totalCount <= 9
+      ? "grid-cols-2 sm:grid-cols-3"
+      : totalCount <= 16
+      ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+      : "grid-cols-2 sm:grid-cols-4 lg:grid-cols-5";
+
+  const tileHeightClass =
+    totalCount <= 4
+      ? "min-h-[200px] sm:min-h-[240px]"
+      : totalCount <= 9
+      ? "min-h-[160px] sm:min-h-[190px]"
+      : "min-h-[130px] sm:min-h-[150px]";
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-[#0f1419] text-white">
@@ -485,6 +531,10 @@ export function GroupCallModal({
               <span className="flex items-center gap-1">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 {totalCount}/{room.maxMembers} người đang tham gia
+              </span>
+              <span className="hidden md:inline">•</span>
+              <span className="hidden md:inline text-emerald-400 font-semibold">
+                ⚡ {qualityModeLabel}
               </span>
             </div>
           </div>
@@ -534,9 +584,19 @@ export function GroupCallModal({
       {/* Main Body: Video Grid + Optional Chat Panel */}
       <div className="relative flex flex-1 overflow-hidden">
         {/* Video Tiles Grid */}
-        <div className={`grid flex-1 gap-3 p-3 sm:p-4 overflow-y-auto ${gridClass}`}>
+        <div className={`grid flex-1 gap-2.5 sm:gap-3 p-3 sm:p-4 overflow-y-auto content-start ${gridClass}`}>
           {/* 1. Local Video Tile */}
-          <div className="relative flex min-h-[200px] sm:min-h-[240px] items-center justify-center overflow-hidden rounded-2xl border-2 border-slate-800 bg-[#161d24]">
+          <div
+            onClick={() =>
+              setActiveSpeakerId((prev) => (prev === currentUserId ? null : currentUserId))
+            }
+            title="Nhấn để ghim / thu nhỏ khung hình"
+            className={`relative flex cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 bg-[#161d24] transition-all ${
+              activeSpeakerId === currentUserId || isScreenSharing
+                ? "col-span-2 row-span-2 min-h-[260px] sm:min-h-[340px] border-amber-500/80 shadow-lg"
+                : `${tileHeightClass} border-slate-800 hover:border-slate-700`
+            }`}
+          >
             <video
               ref={localVideoRef}
               autoPlay
@@ -546,15 +606,19 @@ export function GroupCallModal({
             />
             {isVideoOff && !isScreenSharing && (
               <div className="flex flex-col items-center gap-2">
-                <UserAvatar name={currentUserName} sizeClass="h-16 w-16 text-xl" />
-                <span className="text-xs text-slate-400">Camera đang tắt</span>
+                <UserAvatar
+                  name={currentUserName}
+                  sizeClass={totalCount > 9 ? "h-12 w-12 text-base" : "h-16 w-16 text-xl"}
+                />
+                <span className="text-[11px] text-slate-400">Camera đang tắt</span>
               </div>
             )}
             {/* Status Overlay */}
-            <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-lg bg-black/60 px-2 py-1 text-[11px] font-bold backdrop-blur-md">
-              <span>{currentUserName} (Bạn)</span>
+            <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-lg bg-black/75 px-2 py-1 text-[11px] font-bold backdrop-blur-md">
+              <span className="truncate max-w-[130px]">{currentUserName} (Bạn)</span>
               {isMuted && <span className="text-red-400">🔇</span>}
               {isScreenSharing && <span className="text-amber-400">🖥️ Đang share</span>}
+              {activeSpeakerId === currentUserId && <span className="text-amber-300">📌</span>}
             </div>
           </div>
 
@@ -562,10 +626,19 @@ export function GroupCallModal({
           {otherMembers.map((member) => {
             const displayName =
               member.user?.profile?.displayName || member.user?.name || "Bạn học";
+            const isPinned = activeSpeakerId === member.userId || Boolean(member.isScreenSharing);
             return (
               <div
                 key={member.userId}
-                className="relative flex min-h-[200px] sm:min-h-[240px] items-center justify-center overflow-hidden rounded-2xl border-2 border-slate-800 bg-[#161d24]"
+                onClick={() =>
+                  setActiveSpeakerId((prev) => (prev === member.userId ? null : member.userId))
+                }
+                title="Nhấn để ghim / phóng to thành viên này"
+                className={`relative flex cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 bg-[#161d24] transition-all ${
+                  isPinned
+                    ? "col-span-2 row-span-2 min-h-[260px] sm:min-h-[340px] border-amber-500/80 shadow-lg"
+                    : `${tileHeightClass} border-slate-800 hover:border-slate-700`
+                }`}
               >
                 <video
                   ref={(el) => {
@@ -586,16 +659,17 @@ export function GroupCallModal({
                     <UserAvatar
                       src={member.user?.profile?.avatar || member.user?.image}
                       name={displayName}
-                      sizeClass="h-16 w-16 text-xl"
+                      sizeClass={totalCount > 9 ? "h-12 w-12 text-base" : "h-16 w-16 text-xl"}
                     />
-                    <span className="text-xs text-slate-400">Camera đang tắt</span>
+                    <span className="text-[11px] text-slate-400">Camera đang tắt</span>
                   </div>
                 )}
                 {/* Status Overlay */}
-                <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-lg bg-black/60 px-2 py-1 text-[11px] font-bold backdrop-blur-md">
-                  <span>{displayName}</span>
+                <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-lg bg-black/75 px-2 py-1 text-[11px] font-bold backdrop-blur-md">
+                  <span className="truncate max-w-[130px]">{displayName}</span>
                   {member.isAudioMuted && <span className="text-red-400">🔇</span>}
                   {member.isScreenSharing && <span className="text-amber-400">🖥️ Share</span>}
+                  {activeSpeakerId === member.userId && <span className="text-amber-300">📌</span>}
                 </div>
               </div>
             );

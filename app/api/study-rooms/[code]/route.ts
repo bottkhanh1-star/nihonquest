@@ -97,7 +97,10 @@ export async function POST(
 
       const isAlreadyIn = room.participants.some((p) => p.userId === userId);
       if (!isAlreadyIn && room.participants.length >= room.maxMembers) {
-        return NextResponse.json({ error: "Phòng học đã đủ số lượng thành viên (tối đa 6 người)" }, { status: 409 });
+        return NextResponse.json(
+          { error: `Phòng học đã đủ số lượng thành viên (tối đa ${room.maxMembers} người)` },
+          { status: 409 }
+        );
       }
 
       const participant = await prisma.groupCallParticipant.upsert({
